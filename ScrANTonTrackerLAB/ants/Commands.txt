@@ -1,6 +1,9 @@
 #Commands:
 (All to be run on lcoal computer)
 
+
+
+###RSYNC
 #Run on Lab Computer:
 python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/ants/ants.py train --dataset=/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/data/ --weights=COCO
 
@@ -18,3 +21,20 @@ rsync -r -a -v -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrack
 
 #Retrieve FULLANTSTRAINED from TITAN
 rsync -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrackerTITAN/logs/TRAINEDFULLANTS.h5 /home/simulation/Documents/TITANlogs/
+
+
+
+
+###Labelbox Conversion
+Put the download in 
+Navigate to Labelbox/exporters/coco-exporter, then
+pipenv install
+pipenv run python main.py /home/simulation/Documents/temp/antsJSON.json /home/simulation/Documents/temp/antsCOCONEW.json
+
+
+
+
+###Github
+Navigate to Github folder in Documents
+sudo git add .
+sudo git commit -m "description"

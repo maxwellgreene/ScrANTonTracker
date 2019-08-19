@@ -2,16 +2,19 @@
 (All to be run on lcoal computer)
 
 #Run on Lab Computer:
-python /home/simulation/Documents/ScrANTonTracker/ants/ants.py train --dataset=/home/simulation/Documents/ScrANTonTracker/data/ --weights=COCO
+python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/ants/ants.py train --dataset=/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/data/ --weights=COCO
 
 #Run on TITAN:
 python /home/antlover/Documents/ScrANTonTrackerTITAN/antsTITAN/antsTITAN.py train --dataset=/home/antlover/Documents/ScrANTonTrackerTITAN/data/ --weights=COCO
 
-#Sync ScrANTonTrackerTITAN to TITAN Documents:
-rsync -r -a -v -e ssh --delete /home/simulation/Documents/ScrANTonTrackerTITAN antlover@172.16.1.2:/home/antlover/Documents/
+#Sync ScrANTonTrackerTITAN GitHub to TITAN Documents:
+rsync -r -a -v -e ssh --delete /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerTITAN antlover@172.16.1.2:/home/antlover/Documents/
 
-#Sync ScrANtonTrackerTITAN to TITAN NVMe
-rsync -r -a -v -e ssh --delete /home/simulation/Documents/ScrANTonTrackerTITAN antlover@172.16.1.2:/mnt/md0/
+#Sync ScrANtonTrackerTITAN to TITAN NVMe:
+rsync -r -a -v -e ssh --delete /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerTITAN antlover@172.16.1.2:/mnt/md0/
 
 #Retrieve contents of logs folder from TITAN
 rsync -r -a -v -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrackerTITAN/logs/ /home/simulation/Documents/TITANlogs
+
+#Retrieve FULLANTSTRAINED from TITAN
+rsync -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrackerTITAN/logs/TRAINEDFULLANTS.h5 /home/simulation/Documents/TITANlogs/

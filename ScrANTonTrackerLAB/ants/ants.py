@@ -36,8 +36,12 @@ import numpy as np
 import skimage.draw
 from PIL import Image
 
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+from pycocotools import mask as maskUtils
+
 # Root directory of the project
-ROOT_DIR = os.path.abspath(r"/home/simulation/Documents/ScrANTonTracker/")
+ROOT_DIR = os.path.abspath(r"/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/")
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
@@ -61,20 +65,20 @@ class AntConfig(Config):
     Derives from the base Config class and overrides some values.
     """
     # Give the configuration a recognizable name
-    NAME = "ants"
+    NAME = "ScrANTonData"
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
     IMAGES_PER_GPU = 2
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + balloon
+    NUM_CLASSES = 1 + 4  # Background + balloon
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 100
 
     # Skip detections with < 90% confidence
-    DETECTION_MIN_CONFIDENCE = 0.9
+    DETECTION_MIN_CONFIDENCE = 0.6
 
 
 ############################################################
@@ -91,14 +95,12 @@ class AntDataset(utils.Dataset):
         """
         
         # Add classes. We have only one class to add.
-        self.add_class("ScrANTonData", 1, "Full Ant")
-        self.add_class("ScrANTonData",4,"Head")
-        self.add_class("ScrANTonData",3,"Thorax")
-        self.add_class("ScrANTonData",2,"Abdomen")
+#        self.add_class("ScrANTonData", 1, "Full Ant")
+#        self.add_class("ScrANTonData",4,"Head")
+#        self.add_class("ScrANTonData",3,"Thorax")
+#        self.add_class("ScrANTonData",2,"Abdomen")
 
-        # Train or validation dataset?
-        assert subset in ["train", "val"]
-        dataset_dir = os.path.join(dataset_dir, "train")
+        dataset_dir = os.path.join(ROOT_DIR, "data/train/")
 
         # Load annotations
         # VGG Image Annotator (up to version 1.6) saves each image in the form:
@@ -117,82 +119,107 @@ class AntDataset(utils.Dataset):
         # We mostly care about the x and y coordinates of each region
         # Note: In VIA 2.0, regions was changed from a dict to a list.
         
-        annotations = json.load(open(os.path.join(dataset_dir, "antsJSON.json")))
-        #annotations = list(annotations.values())  # don't need the dict keys
-
-        # The VIA tool saves images in the JSON even if they don't have any
-        # annotations. Skip unannotated images.
+#        annotations = json.load(open(os.path.join(dataset_dir, "antsJSON.json")))
+#        annotations = [a for a in annotations if type(a['Label']) is dict]
+#
+#        # Add images
+#        for a in annotations:
+#            temp = a['Label']
+#            polygons=[r for r in temp['Full Ant']]
+#            image = Image.open(urllib.request.urlopen(a['Labeled Data']))
+#            height = image.height
+#            width = image.width
+#
+#            self.add_image(
+#                "ScrANTonDataset",
+#                image_id=a['ID'],
+#                path=a['Labeled Data'],
+#                width=width, height=height,
+#                polygons=polygons)
         
-        annotations = [a for a in annotations if type(a['Label']) is dict]
-
+        antsCOCO = COCO(os.path.join(dataset_dir, "antsCOCO.json"))
+        
+        # Add classes
+        for i in antsCOCO.getCatIds():
+            self.add_class("ScrANTonDataset", i, antsCOCO.loadCats(i)[0]["name"])
+        
         # Add images
-        for a in annotations:
-            # Get the x, y coordinaets of points of the polygons that make up
-            # the outline of each object instance. These are stores in the
-            # shape_attributes (see json format above)
-            # The if condition is needed to support VIA versions 1.x and 2.x.
+        for i in antsCOCO.getImgIds():
+            if antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i],catIds=antsCOCO.getCatIds())):
+                self.add_image(
+                        "ScrANTonDataset", image_id=i,
+                        path = antsCOCO.imgs[i]['coco_url'],  #image = Image.open(urllib.request.urlopen(antsCOCO.imgs[i]['coco_url'])),
+                        width=antsCOCO.imgs[i]["width"],
+                        height=antsCOCO.imgs[i]["height"],
+                        annotations=antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i], 
+                                                                         catIds=antsCOCO.getCatIds())))
             
-            temp = a['Label']
-            polygons=[r for r in temp['Full Ant']]
-
-            # load_mask() needs the image size to convert polygons to masks.
-            # Unfortunately, VIA doesn't include it in JSON, so we must read
-            # the image. This is only managable since the dataset is tiny.
-                    #image_path = os.path.join(dataset_dir, a['file_name'])
-                    #image = skimage.io.imread(image_path)
-            image = Image.open(urllib.request.urlopen(a['Labeled Data']))
-            height = image.height
-            width = image.width
-
-            self.add_image(
-                "Full Ant",
-                image_id=a['ID'],  # use file name as a unique image id
-                path=a['Labeled Data'],
-                width=width, height=height,
-                polygons=polygons)
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
-       Returns:
+        Returns:
         masks: A bool array of shape [height, width, instance count] with
             one mask per instance.
         class_ids: a 1D array of class IDs of the instance masks.
         """
-        # If not a balloon dataset image, delegate to parent class.
+#        # Convert polygons to a bitmap mask of shape
+#        # [height, width, instance_count]
+#        info = self.image_info[image_id]
+#        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
+#                        dtype=np.uint8)
+#        
+#        for i,p in enumerate(info["polygons"]):
+#            # Get indexes of pixels inside the polygon and set them to 1
+#            #print("pTYPE: "+str(type(p))+" pTYPEgeom"+str(type(p['geometry']))+"pTYPEgeom1: "+str(type(p['geometry'][1])))
+#            x=[]
+#            y=[]
+#            for j,pp in enumerate(p['geometry']):
+#                x.append(pp['x'])
+#                y.append(pp['y'])
+#            xx=np.asarray(x)
+#            yy=np.asarray(y)
+#            #rr, cc = skimage.draw.polygon(p['geometry']['y'], p['geometry']['x'])
+#            rr, cc = skimage.draw.polygon(yy,xx)
+#            mask[rr, cc, i] = 1
+#
+#        # Return mask, and array of class IDs of each instance. Since we have
+#        # one class ID only, we return an array of 1s
+#        return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
         
-        
-        #image_info = self.image_info[image_id]
-        #if image_info["source"] != "ant":
-            #return super(self.__class__, self).load_mask(image_id)
+        image_info = self.image_info[image_id]
+        instance_masks = []
+        class_ids = []
+        annotations = self.image_info[image_id]["annotations"]
+        # Build mask of shape [height, width, instance_count] and list
+        # of class IDs that correspond to each channel of the mask.
+        for annotation in annotations:
+            class_id = annotation['category_id']    #self.map_source_class_id("{}".format(annotation['category_id']))
+            if class_id:
+                m = self.annToMask(annotation, image_info["height"],
+                                   image_info["width"])
+                # Some objects are so small that they're less than 1 pixel area
+                # and end up rounded out. Skip those objects.
+                if m.max() < 1:
+                    continue
+                # Is it a crowd? If so, use a negative class ID.
+                if annotation['iscrowd']:
+                    # Use negative class ID for crowds
+                    class_id *= -1
+                    # For crowd masks, annToMask() sometimes returns a mask
+                    # smaller than the given dimensions. If so, resize it.
+                    if m.shape[0] != image_info["height"] or m.shape[1] != image_info["width"]:
+                        m = np.ones([image_info["height"], image_info["width"]], dtype=bool)
+                instance_masks.append(m)
+                class_ids.append(class_id)
 
-
-
-        # Convert polygons to a bitmap mask of shape
-        # [height, width, instance_count]
-        info = self.image_info[image_id]
-        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
-                        dtype=np.uint8)
-        #print("THIS IS THE INFO POLYGONS TYPE:"+str(type(info['polygons'])))
-        #print("THIS IS INFO POLYGONS:")
-        #print(info['polygons'])
-        
-        for i,p in enumerate(info["polygons"]):
-            # Get indexes of pixels inside the polygon and set them to 1
-            #print("pTYPE: "+str(type(p))+" pTYPEgeom"+str(type(p['geometry']))+"pTYPEgeom1: "+str(type(p['geometry'][1])))
-            x=[]
-            y=[]            
-            for j,pp in enumerate(p['geometry']):
-                x.append(pp['x'])
-                y.append(pp['y'])
-            xx=np.asarray(x)
-            yy=np.asarray(y)
-            #rr, cc = skimage.draw.polygon(p['geometry']['y'], p['geometry']['x'])
-            rr, cc = skimage.draw.polygon(yy,xx)
-            mask[rr, cc, i] = 1
-
-        # Return mask, and array of class IDs of each instance. Since we have
-        # one class ID only, we return an array of 1s
-        return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
+        # Pack instance masks into an array
+        if class_ids:
+            mask = np.stack(instance_masks, axis=2).astype(np.bool)
+            class_ids = np.array(class_ids, dtype=np.int32)
+            return mask, class_ids
+        else:
+            # Call super class to return an empty mask
+            return super(AntDataset, self).load_mask(image_id)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -202,6 +229,33 @@ class AntDataset(utils.Dataset):
         else:
             super(self.__class__, self).image_reference(image_id)
 
+    def annToRLE(self, ann, height, width):
+        """
+        Convert annotation which can be polygons, uncompressed RLE to RLE.
+        :return: binary mask (numpy 2D array)
+        """
+        segm = ann['segmentation']
+        if isinstance(segm, list):
+            # polygon -- a single object might consist of multiple parts
+            # we merge all parts into one mask rle code
+            rles = maskUtils.frPyObjects(segm, height, width)
+            rle = maskUtils.merge(rles)
+        elif isinstance(segm['counts'], list):
+            # uncompressed RLE
+            rle = maskUtils.frPyObjects(segm, height, width)
+        else:
+            # rle
+            rle = ann['segmentation']
+        return rle
+
+    def annToMask(self, ann, height, width):
+        """
+        Convert annotation which can be polygons, uncompressed RLE, or RLE to binary mask.
+        :return: binary mask (numpy 2D array)
+        """
+        rle = self.annToRLE(ann, height, width)
+        m = maskUtils.decode(rle)
+        return m
 
 def train(model):
     """Train the model."""

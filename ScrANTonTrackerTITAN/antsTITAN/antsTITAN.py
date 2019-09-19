@@ -76,10 +76,10 @@ class AntConfig(Config):
     NUM_CLASSES = 1 + 4  # Background + balloon
 
     # Number of training steps per epoch
-    STEPS_PER_EPOCH = 40
+    STEPS_PER_EPOCH = 80
 
     # Skip detections with < 90% confidence
-    DETECTION_MIN_CONFIDENCE = 0.9
+    DETECTION_MIN_CONFIDENCE = 0.95
 
 
 ############################################################
@@ -304,7 +304,7 @@ def train(model):
     print("Stage 1: Training network heads")                                                                                                                                                                   
     model.train(dataset_train, dataset_val,                                                                                                                                                           
                 learning_rate=config.LEARNING_RATE,                                                                                                                                                   
-                epochs=100,                                                                                                                                                                           
+                epochs=200,                                                                                                                                                                           
                 layers='heads')                                                                                                                                                                       
  
  
@@ -313,7 +313,7 @@ def train(model):
     print("Stage 2: Fine tune Resnet stage 4 and up")                                                                                                                                                          
     model.train(dataset_train, dataset_val,                                                                                                                                                           
                 learning_rate=config.LEARNING_RATE,                                                                                                                                                   
-                epochs=190,                                                                                                                                                                           
+                epochs=380,                                                                                                                                                                           
                 layers='4+')                                                                                                                                                                          
  
     # Training - Stage 3                                                                                                                                                                               
@@ -321,7 +321,7 @@ def train(model):
     print("Stage 3: Fine tune all layers")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE / 10,
-                epochs=200,
+                epochs=400,
                 layers='all')
     
     model_path = os.path.join(r"/home/antlover/Documents/ScrANTonTrackerTITAN/logs/TRAINEDFULLANTS.h5")

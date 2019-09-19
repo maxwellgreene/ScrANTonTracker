@@ -24,13 +24,11 @@ rsync -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrackerTITAN/l
 
 
 
-
 ###Labelbox Conversion
 Put the download in 
 Navigate to Labelbox/exporters/coco-exporter, then
 pipenv install
-pipenv run python main.py /home/simulation/Documents/temp/antsJSON.json /home/simulation/Documents/temp/antsCOCONEW.json
-
+pipenv run python main.py /home/simulation/Documents/COCOConversion/antsJSON/antsJSONWKT2.json /home/simulation/Documents/COCOConversion/antsCOCONEW
 
 
 
@@ -38,3 +36,4 @@ pipenv run python main.py /home/simulation/Documents/temp/antsJSON.json /home/si
 Navigate to Github folder in Documents
 sudo git add .
 sudo git commit -m "description"
+sudo git push

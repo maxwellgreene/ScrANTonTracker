@@ -18,7 +18,7 @@ import scipy
 import skimage.color
 import skimage.io
 import skimage.transform
-import urllib.request
+import urllib3
 import shutil
 import warnings
 from distutils.version import LooseVersion
@@ -885,7 +885,7 @@ def denorm_boxes(boxes, shape):
 
 
 def resize(image, output_shape, order=1, mode='constant', cval=0, clip=True,
-           preserve_range=False, anti_aliasing=False, anti_aliasing_sigma=None):
+           preserve_range=True, anti_aliasing=False, anti_aliasing_sigma=None):
     """A wrapper for Scikit-Image resize().
 
     Scikit-Image generates warnings on every call to resize() if it doesn't

@@ -16,7 +16,7 @@ import os
 import sys
 #import json
 import datetime
-#import urllib
+import urllib
 import numpy as np
 import skimage.draw
 #from PIL import Image
@@ -36,7 +36,7 @@ from mrcnn.config import Config
 from mrcnn import model as modellib, utils
 
 # Path to trained weights file
-COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, r"logs/mask_rcnn_coco.h5")
+COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, r"mask_rcnn_coco.h5")
 
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
@@ -101,6 +101,28 @@ class AntDataset(utils.Dataset):
                         annotations=antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i],
                                                                          catIds=antsCOCO.getCatIds())))
 
+    def load_image(self, image_id):
+        """
+            Load the specified image and return a [H,W,3] Numpy array.
+        """
+        # Load image
+        path = self.image_info[image_id]['path']
+        url = self.image_info[image_id]['coco_url']
+
+        is_url = urllib.request.urlopen(url).getcode() == 200
+
+        if(is_url):
+            image = skimage.io.imread(url)
+        else:
+            image = skimage.io.imread(path)
+        # If grayscale. Convert to RGB for consistency.
+        if image.ndim != 3:
+            image = skimage.color.gray2rgb(image)
+        # If has an alpha channel, remove it for consistency
+        if image.shape[-1] == 4:
+            image = image[..., :3]
+        return image
+
     def load_mask(self, image_id):
         """Generate instance masks for an image.
         Returns:
@@ -108,29 +130,6 @@ class AntDataset(utils.Dataset):
             one mask per instance.
         class_ids: a 1D array of class IDs of the instance masks.
         """
-#        # Convert polygons to a bitmap mask of shape
-#        # [height, width, instance_count]
-#        info = self.image_info[image_id]
-#        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
-#                        dtype=np.uint8)
-#
-#        for i,p in enumerate(info["polygons"]):
-#            # Get indexes of pixels inside the polygon and set them to 1
-#            #print("pTYPE: "+str(type(p))+" pTYPEgeom"+str(type(p['geometry']))+"pTYPEgeom1: "+str(type(p['geometry'][1])))
-#            x=[]
-#            y=[]
-#            for j,pp in enumerate(p['geometry']):
-#                x.append(pp['x'])
-#                y.append(pp['y'])
-#            xx=np.asarray(x)
-#            yy=np.asarray(y)
-#            #rr, cc = skimage.draw.polygon(p['geometry']['y'], p['geometry']['x'])
-#            rr, cc = skimage.draw.polygon(yy,xx)
-#            mask[rr, cc, i] = 1
-#
-#        # Return mask, and array of class IDs of each instance. Since we have
-#        # one class ID only, we return an array of 1s
-#        return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
 
         image_info = self.image_info[image_id]
         instance_masks = []
@@ -139,7 +138,7 @@ class AntDataset(utils.Dataset):
         # Build mask of shape [height, width, instance_count] and list
         # of class IDs that correspond to each channel of the mask.
         for annotation in annotations:
-            class_id = annotation['category_id']    #self.map_source_class_id("{}".format(annotation['category_id']))
+            class_id = annotation['category_id']
             if class_id:
                 m = self.annToMask(annotation, image_info["height"],
                                    image_info["width"])
@@ -224,10 +223,6 @@ def train(model):
                 learning_rate=config.LEARNING_RATE,
                 epochs=30,
                 layers='heads')
-
-
-
-
 
 ############################################################
 #  Training
@@ -320,9 +315,6 @@ if __name__ == '__main__':
     # Train or evaluate
     if args.command == "train":
         train(model)
-    elif args.command == "splash":
-        detect_and_color_splash(model, image_path=args.image,
-                                video_path=args.video)
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'splash'".format(args.command))

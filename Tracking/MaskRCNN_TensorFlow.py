@@ -7,12 +7,10 @@ from skimage import img_as_float
 import colorsys
 import numpy as np
 
-import time
-import glob
 import cv2
 
 # Root directory of the project
-ROOT_DIR = os.path.abspath("../Mask_RCNN-master")
+ROOT_DIR = os.path.abspath("/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB")
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
@@ -41,27 +39,27 @@ class InferenceConfig(carpConfigs.CarpenterConfig):
 class MaskRCNN_TensorFlow:
     def __init__(self):
         # Directory to save logs and trained model
-        MODEL_DIR = os.path.join(ROOT_DIR, "logs")
+        MODEL_DIR = os.path.join(ROOT_DIR, "models")
 
         # Local path to trained weights file
-        MODEL_PATH = 'mask_rcnn_carpenter_0250.h5'
+        MODEL_PATH = os.path.join(MODEL_DIR,'mask_rcnn_coco.h5')
         
         config = InferenceConfig()
         #self.config.display()
 
         # Create model object in inference mode.
         self.model = modellib.MaskRCNN(mode="inference", model_dir=MODEL_DIR, config=config)
-        weights_path = "/home/intelalert/IntelAlertPython2/mask_rcnn_carpenter_0250.h5" 
-
 
         # Load weights trained on MS-COCO
+        weights_path = "/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB" 
+        
         #model.load_weights(MODEL_PATH, by_name=True)
         self.model.load_weights(weights_path, by_name=True)
 
         # COCO Class names
         # Index of the class in the list is its ID. For example, to get ID of
         # the teddy bear class, use: class_names.index('teddy bear')
-        class_names = ['bg', 'person','car', 'truck']
+        class_names = ['Full Ant', 'Head','Thorax', 'Abdomen']
         self.labels ={}
         for i, name, in enumerate(class_names):
             self.labels[i] = name

@@ -1,2 +1,0 @@
-#Commands:
-python /home/simulation/Documents/ScrANTonTracker/ants/ants.py train --dataset=/home/simulation/Documents/ScrANTonTracker/data/ --weights=COCO

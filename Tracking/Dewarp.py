@@ -1,21 +1,20 @@
-import matplotlib.pyplot as plt
-import GoPro_calib as GoProCal
-import cv2, sys
+#import matplotlib.pyplot as plt
+import Calibration as Cal
+import cv2
+#import sys
 import numpy as np
-import time
-
 
 def makeUndestortMeta():
 
     #Import Information
-    filename = 'Videos/pattern2.MP4'
+    filename = '/home/simulation/Documents/Github/ScrANTonTracker/Video/AntTest1/Test1.MP4'
     #Input the number of board images to use for calibration (recommended: ~20)
-    n_boards = 30
+    n_boards = 4
     #Input the number of squares on the board (width and height)
-    board_w = 9
-    board_h = 6
+    board_w = 8-1
+    board_h = 8-1
     #Board dimensions (typically in cm)
-    board_dim = 25
+    board_dim = 20
     #Image resolution
     image_size = (3840,2160)#(1920, 1080)
 
@@ -35,7 +34,7 @@ def makeUndestortMeta():
     print(" ")
     print('We will collect ' + str(n_boards) + ' calibration images.')
 
-    #GoProCal.ImageCollect(filename, n_boards)
+    Cal.ImageCollect(filename, n_boards)
 
     print(' ')
     print('All the calibration images are collected.')
@@ -45,13 +44,13 @@ def makeUndestortMeta():
     print('Press the esc button to close the image windows as they appear.')
     print(' ')
 
-    GoProCal.ImageProcessing(n_boards, board_w, board_h, board_dim)
+    Cal.ImageProcessing(n_boards, board_w, board_h, board_dim)
 
 
 class DewarpVideoCapture:
     def __init__(self, a_filename,
                  a_calibration_file='calibration_data.npz'):
-
+        print("starting")
         # call the constructor form cv2.videoCapture
         self.cap = cv2.VideoCapture(a_filename)
 

@@ -1,0 +1,63 @@
+#Commands:
+(All to be run on lcoal computer)
+
+=====================================
+=============  RSYNC  ===============
+=====================================
+#Run on Lab Computer:
+python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/ants/ants.py train --dataset=/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/data/ --weights=COCO
+
+#Run on TITAN:
+python /home/antlover/Documents/ScrANTonTrackerTITAN/antsTITAN/antsTITAN.py train --dataset=/home/antlover/Documents/ScrANTonTrackerTITAN/data/ --weights=COCO
+
+#Sync ScrANTonTrackerTITAN GitHub to TITAN Documents:
+rsync -r -a -v -e ssh --delete /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerTITAN antlover@172.16.1.2:/home/antlover/Documents/
+
+#Sync ScrANtonTrackerTITAN to TITAN NVMe:
+rsync -r -a -v -e ssh --delete /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerTITAN antlover@172.16.1.2:/mnt/md0/
+
+#Retrieve contents of logs folder from TITAN
+rsync -r -a -v -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrackerTITAN/logs/ /home/simulation/Documents/TITANlogs
+
+#Retrieve FULLANTSTRAINED from TITAN
+rsync -e ssh antlover@172.16.1.2:/home/antlover/Documents/ScrANTonTrackerTITAN/logs/TRAINEDFULLANTS.h5 /home/simulation/Documents/TITANlogs/
+
+======================================
+==========  DEWARP MANUAL  ===========
+======================================
+Put video in ScrANTonTracker/Video
+
+Save calibration data on LAB, so that it can be used to dewarp other videos
+---------------------------------
+General:    python <py file path> "saveCalib" <projectName> <videoName> <dataFile = calibration_data>
+FilePath:   /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py
+Example:    python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py saveCalib sample sampleVid1
+
+Run Dewarp on LAB from calibration data
+---------------------------------
+General:    python <py file path> "dewarpVideo" <projectName> <videoName> <dataFile = calibration_data>
+FilePath:   /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py
+Example:    python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py saveCalib sample sampleVid1
+
+=====================================
+=======  Labelbox Conversion  =======
+=====================================
+Put the download in antsJSON
+Navigate to Labelbox/exporters/coco-exporter, then
+pipenv install
+pipenv run python main.py /home/simulation/Documents/COCOConversion/antsJSON/<filename>.json /home/simulation/Documents/COCOConversion/antsCOCONEW
+pipenv run python main.py /home/simulation/Documents/FreshNewBoi/COCOconv/antsJSON/antsJSON.json /home/simulation/Documents/FreshNewBoi/COCOconv/antsCOCO
+=====================================
+=============  Github  ==============
+=====================================
+Navigate to Github/ScrANtonTracker folder in Documents
+sudo git add .
+sudo git commit -m "description"
+sudo git push
+
+File permissions: Make simulation the owner of all files in github
+sudo chown -R simulation /home/simulation/Documents/Github/
+
+
+
+

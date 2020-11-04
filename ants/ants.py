@@ -43,7 +43,7 @@ COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, r"logs/mask_rcnn_coco.h5")
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 
 ############################################################
-#  Configurations
+#  Configurations change
 ############################################################
 
 class AntConfig(Config):
@@ -65,7 +65,7 @@ class AntConfig(Config):
 
     # Skip detections with < 90% confidence
     DETECTION_MIN_CONFIDENCE = 0.6
-    
+
     IMAGE_RESIZE_MODE = "square"
     IMAGE_MIN_DIM = 800
     IMAGE_MAX_DIM = 1024
@@ -78,18 +78,18 @@ class AntConfig(Config):
 class AntDataset(utils.Dataset):
 
     def load_ant(self, dataset_dir, subset):
-        
+
         """Load a subset of the Balloon dataset.
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
         """
-        
+
         antsCOCO = COCO(os.path.join(dataset_dir, "antsCOCO.json"))
-        
+
         # Add classes
         for i in antsCOCO.getCatIds():
             self.add_class("ScrANTonDataset", i, antsCOCO.loadCats(i)[0]["name"])
-        
+
         # Add images
         for i in antsCOCO.getImgIds():
             if antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i],catIds=antsCOCO.getCatIds())): #and (antsCOCO.imgs[i]["width"] < 1024) and (antsCOCO.imgs[i]["height"] < 1024):
@@ -98,9 +98,9 @@ class AntDataset(utils.Dataset):
                         path = antsCOCO.imgs[i]['file_name'],#['coco_url'],  #image = Image.open(urllib.request.urlopen(antsCOCO.imgs[i]['coco_url'])),
                         width=antsCOCO.imgs[i]["width"],
                         height=antsCOCO.imgs[i]["height"],
-                        annotations=antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i], 
+                        annotations=antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i],
                                                                          catIds=antsCOCO.getCatIds())))
-            
+
     def load_mask(self, image_id):
         """Generate instance masks for an image.
         Returns:
@@ -113,7 +113,7 @@ class AntDataset(utils.Dataset):
 #        info = self.image_info[image_id]
 #        mask = np.zeros([info["height"], info["width"], len(info["polygons"])],
 #                        dtype=np.uint8)
-#        
+#
 #        for i,p in enumerate(info["polygons"]):
 #            # Get indexes of pixels inside the polygon and set them to 1
 #            #print("pTYPE: "+str(type(p))+" pTYPEgeom"+str(type(p['geometry']))+"pTYPEgeom1: "+str(type(p['geometry'][1])))
@@ -131,7 +131,7 @@ class AntDataset(utils.Dataset):
 #        # Return mask, and array of class IDs of each instance. Since we have
 #        # one class ID only, we return an array of 1s
 #        return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
-        
+
         image_info = self.image_info[image_id]
         instance_masks = []
         class_ids = []

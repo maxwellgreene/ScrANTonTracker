@@ -20,6 +20,8 @@ import urllib
 import numpy as np
 import skimage.draw
 #from PIL import Image
+import urllib.request
+import skimage.io
 
 import pycocotools
 from pycocotools.coco import COCO

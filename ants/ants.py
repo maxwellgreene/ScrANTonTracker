@@ -95,7 +95,8 @@ class AntDataset(utils.Dataset):
             if antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i],catIds=antsCOCO.getCatIds())): #and (antsCOCO.imgs[i]["width"] < 1024) and (antsCOCO.imgs[i]["height"] < 1024):
                 self.add_image(
                         "ScrANTonDataset", image_id=i,
-                        path = antsCOCO.imgs[i]['file_name'],#['coco_url'],  #image = Image.open(urllib.request.urlopen(antsCOCO.imgs[i]['coco_url'])),
+                        path = antsCOCO.imgs[i]['file_name'],
+                        url = antsCOCO.imgs[i]['coco_url'],  #image = Image.open(urllib.request.urlopen(antsCOCO.imgs[i]['coco_url'])),
                         width=antsCOCO.imgs[i]["width"],
                         height=antsCOCO.imgs[i]["height"],
                         annotations=antsCOCO.loadAnns(antsCOCO.getAnnIds(imgIds=[i],
@@ -107,7 +108,7 @@ class AntDataset(utils.Dataset):
         """
         # Load image
         path = self.image_info[image_id]['path']
-        url = self.image_info[image_id]['coco_url']
+        url = self.image_info[image_id]['url']
 
         is_url = urllib.request.urlopen(url).getcode() == 200
 

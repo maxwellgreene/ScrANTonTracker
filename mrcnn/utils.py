@@ -454,10 +454,9 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
     if debugPrint: print("SCALE: ",scale)
 
     # Resize image using bilinear interpolation
-    if True:
-        #print("I SHOULD NOT BE DOING THIS")
-        print("RESIZING IMAGE")
-        image = resize(image, (round(h * scale), round(w * scale)),preserve_range=True)
+    #print("I SHOULD NOT BE DOING THIS")
+    #print("RESIZING IMAGE")
+    image = resize(image, (round(h * scale), round(w * scale)),preserve_range=True)
 
     # Need padding or cropping?
     if mode == "square":

@@ -5,23 +5,21 @@
 Instructions for training on lab computer:
 
 Open terminal and navigate to the desired folder:
-> cd /home/ant/ScrANTonTracker
+> cd /home/ant/
 
 Make sure the files are up-to-date from github:
 > git clone https://github.com/maxwellgreene/ScrANTonTracker.git
 
-Train on lab computer:
-> python ants/ants.py train --dataset= --weights=COCO
+Now that the files have been updated, navigate into that folder
+> cd ScrANTonTracker
 
-#Run on Lab Computer:
-python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/ants/ants.py train --dataset=/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/data/ --weights=COCO
-
-#Run on TITAN:
-python /home/antlover/Documents/ScrANTonTrackerTITAN/antsTITAN/antsTITAN.py train --dataset=/home/antlover/Documents/ScrANTonTrackerTITAN/data/ --weights=COCO
+Train the model:
+> python ./ants/ants.py train --dataset=./data/ant --weights=COCO
 
 ======================================
 ==========  DEWARP MANUAL  ===========
 ======================================
+
 Put video in ScrANTonTracker/Video
 
 Save calibration data on LAB, so that it can be used to dewarp other videos

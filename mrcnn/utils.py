@@ -105,7 +105,7 @@ def compute_overlaps_masks(masks1, masks2):
     """Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
     """
-    
+
     # If either set of masks is empty return empty result
     if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
         return np.zeros((masks1.shape[-1], masks2.shape[-1]))
@@ -438,7 +438,7 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
         # Scale up but not down
         scale = max(1, min_dim / min(h, w))
         if debugPrint: print("DOING MIN DIM. SCALE: ",scale)
-        
+
     if min_scale and scale < min_scale:
         scale = min_scale
         if debugPrint: print("DOING MIN SCALE. SCALE: ",scale)
@@ -454,8 +454,9 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
     if debugPrint: print("SCALE: ",scale)
 
     # Resize image using bilinear interpolation
-    if False:
-        print("I SHOULD NOT BE DOING THIS")
+    if True:
+        #print("I SHOULD NOT BE DOING THIS")
+        print("RESIZING IMAGE")
         image = resize(image, (round(h * scale), round(w * scale)),preserve_range=True)
 
     # Need padding or cropping?
@@ -473,7 +474,7 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
         if debugPrint: print("MAX_DIM: ",max_dim," H: ",h," W: ",w)
         padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
         if debugPrint: print("PADDING: ",padding)
-        
+
         image = np.pad(image, padding, mode='constant', constant_values=0)
         window = (top_pad, left_pad, h + top_pad, w + left_pad)
     elif mode == "pad64":
@@ -777,7 +778,7 @@ def compute_ap_range(gt_box, gt_class_id, gt_mask,
     """Compute AP over a range or IoU thresholds. Default range is 0.5-0.95."""
     # Default is 0.5 to 0.95 with increments of 0.05
     iou_thresholds = iou_thresholds or np.arange(0.5, 1.0, 0.05)
-    
+
     # Compute AP over range of IoU thresholds
     AP = []
     for iou_threshold in iou_thresholds:

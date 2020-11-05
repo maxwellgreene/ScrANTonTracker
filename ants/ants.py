@@ -114,7 +114,7 @@ class AntDataset(utils.Dataset):
 
         is_url = urllib.request.urlopen(url).getcode() == 200
 
-        if(is_url):
+        if is_url:
             image = skimage.io.imread(url)
         else:
             image = skimage.io.imread(path)

@@ -1,10 +1,9 @@
 # TO DO:
-# Make functiosn callable with arguments
+# Make functions callable with arguments
 
 import cv2, sys
 import numpy as np
 import os
-from console_progressbar import ProgressBar
 
 try:
     xrange
@@ -250,8 +249,6 @@ def DewarpMovie(readpath,writepath,datapath):
     if status == True:
         total_frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
 
-        pb = ProgressBar(total=total_frames,prefix='8==',suffix='===D',length=50,decimals=0,fill='=',zfill='-')
-
         with np.load(datapath) as data:
             intrinsic_matrix = data['intrinsic_matrix']
             distCoeff = data['distCoeff']
@@ -270,7 +267,7 @@ def DewarpMovie(readpath,writepath,datapath):
                 #temp = cv2.resize(dst[ROI[1]:(ROI[3]+ROI[1]), ROI[0]:(ROI[0]+ROI[2])], image_size, fx=sc,fy=sc,interpolation=cv2.INTER_NEAREST)
                 #temp = cv2.resize(dst[int(mapy[ROI[1],ROI[0]]):int((mapy[ROI[3],ROI[1]])), int(mapx[ROI[0],[1]]):int((mapx[ROI[0],ROI[1]]))], image_size, fx=sc,fy=sc,interpolation=cv2.INTER_NEAREST)
                 out.write(dst)
-                pb.print_progress_bar(i)
+                #pb.print_progress_bar(i)
 
         out.release()
         video.release()

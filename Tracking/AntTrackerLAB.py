@@ -160,9 +160,7 @@ class Filter:
 
     def CorrectUpdate(self, a_xk, a_Pk):
         """ add your correction here if one is needed. """
-
         return a_xk, a_Pk
-
 
 class ant(Filter):
     def __init__(self, dt, a_initialState):
@@ -170,17 +168,17 @@ class ant(Filter):
         #self.xk = a_initialState
         self.xk = self.toPoint(a_initialState)
 
-        self.Pk = np.array([[20000, 0, 0, 0, 0],
-                            [0, 20000, 0, 0, 0],
-                            [0, 0, 300, 0, 0],
-                            [0, 0, 0, 1000, 0],
-                            [0, 0, 0, 0, 1000]])
+        self.Pk = np.array([[20000,     0,   0,    0,    0],
+                            [    0, 20000,   0,    0,    0],
+                            [    0,     0, 300,    0,    0],
+                            [    0,     0,   0, 1000,    0],
+                            [    0,     0,   0,    0, 1000]])
 
-        self.R = np.array([[100, 0, 0, 0, 0],
-                           [0, 100, 0, 0, 0],
-                           [0, 0, 60, 10, 10],
-                           [0, 0, 10, 80, 0],
-                           [0, 0, 10, 0, 80]])
+        self.R = np.array([[100,   0,  0,  0,  0],
+                           [  0, 100,  0,  0,  0],
+                           [  0,   0, 60, 10, 10],
+                           [  0,   0, 10, 80,  0],
+                           [  0,   0, 10,  0, 80]])
 
         self.F = np.array([[1, 0, 0, 0, 0],
                            [0, 1, 0, 0, 0],
@@ -188,11 +186,11 @@ class ant(Filter):
                            [0, 0, 0, 1, 0],
                            [0, 0, 0, 0, 1]])
 
-        self.Q = np.array([[8000, 200, 0, 0, 0],
-                           [200, 8000, 0, 0, 0],
-                           [0, 0, 80, 0, 0],
-                           [0, 0, 0, 4, 0],
-                           [0, 0, 0, 0, 4]])
+        self.Q = np.array([[8000,  200,  0, 0, 0],
+                           [ 200, 8000,  0, 0, 0],
+                           [   0,    0, 80, 0, 0],
+                           [   0,    0,  0, 4, 0],
+                           [   0,    0,  0, 0, 4]])
 
         self.H = np.array([[1, 0, 0, 0, 0],
                            [0, 1, 0, 0, 0],
@@ -212,6 +210,19 @@ class ant(Filter):
         self.ys = []
         self.time = []
         self.add_point(self.xk, 0)
+
+    def getPoint(self):
+        return [self.xs[-1],self.ys[-1],self.thetas[-1],self.lengths[-1],self.widths[-1]]
+
+    def getHead(self):
+        return {
+            "a": self.areas[-1],
+            "x":self.xs[-1],
+            "y":self.ys[-1],
+            "w":self.widths[-1],
+            "l":self.lengths[-1],
+            "t":self.thetas[-1]
+        }
 
     def toHead(self, a_temp):
         if type(a_temp) is dict:
@@ -422,15 +433,16 @@ class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
                 mask = r['masks'][:,:,i]
                 contours, _ = cv2.findContours(mask.astype('uint8'), mode = cv2.RETR_LIST, method = cv2.CHAIN_APPROX_SIMPLE)
                 cnt = contours[0]
-                ellipse = cv2.fitEllipse(cnt)
-                antLocs.append({
-                    "a":cv2.contourArea(cnt),
-                    "x":ellipse[0][0],
-                    "y":ellipse[0][1],
-                    "w":ellipse[1][0],
-                    "l":ellipse[1][1],
-                    "t":ellipse[2]
-                })
+                if cnt.shape[0] > 5:
+                    ellipse = cv2.fitEllipse(cnt)
+                    antLocs.append({
+                        "a":cv2.contourArea(cnt),
+                        "x":ellipse[0][0],
+                        "y":ellipse[0][1],
+                        "w":ellipse[1][0],
+                        "l":ellipse[1][1],
+                        "t":ellipse[2]
+                    })
 
                 # areas.append(cv2.contourArea(cnt))
                 # cx.append(ellipse[0][0])
@@ -455,7 +467,7 @@ class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
         """
 
         vis = None #
-        visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
+        #visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
 
         #should return a list of the form: [cx, cy, theta, l, w]
         return vis, antLocs #[cx,cy,thetas,ls,ws] #self.reformat(r['rois'],r['masks'], r['scores'], r['class_ids']), cv_image[:,:,::-1]
@@ -497,8 +509,7 @@ class antTracker:
         while moreFrames:
             #print(self.frameNumber)
             moreFrames = self.processNextFrame()
-            if self.frameNumber >= 100:
-                moreFrames = False
+            # if self.frameNumber >= 20:     moreFrames = False
 
     def processNextFrame(self):
         print('processing frame {}'.format(self.frameNumber))
@@ -544,22 +555,13 @@ class antTracker:
                 antNew = ant(self.dt, heading)
                 self.ants.append(antNew)
         else:
-            print('frame number: ',self.frameNumber,' ants found: ',len(headings))
-            pprint(self.ants[0])
-            #pprint(headings[0])
-
             used = set()
             remaining = set(range(len(self.ants)))
             matchInf = []
 
-            #if len(self.ants) != len(meas_vecs):
-            #    print(len(ants), len(meas_vecs), "  There was a problem")
-
             while len(remaining) > 0:
                 dists = []
-                i = list(remaining)[0] #ant ind
-                print("remaining:")
-                pprint(remaining)
+                i = list(remaining)[0]
                 for j, heading in enumerate(headings):
                     #print("Comparing heading : ",j," to ant : ",i)
                     #pprint(heading)
@@ -568,16 +570,10 @@ class antTracker:
                     dist = self.ants[i].get_distance((heading['x'],heading['y']))
                     dists.append(dist)
 
-                matchedInd = np.argmin(dists)
-                #print("distances: ",dists)
-                #print("matchedInd: ",matchedInd)
-                #print("matched index: ",matchedInd)
-
-                matchInf.append([i, np.min(dists), matchedInd])
-                #matchInf[matchedInd] = [i,np.min(dists)]
-
-                print("Match Inf: ")
-                pprint(matchInf)
+                if np.min(dists) > 75:
+                    matchInf.append([i, np.min(dists), -1])
+                else:
+                    matchInf.append([i, np.min(dists), np.argmin(dists)])
 
                 remaining.remove(i)
 
@@ -607,10 +603,13 @@ class antTracker:
                 """
 
             for match in matchInf:#.items():
-                    #meas_vect, __ = self.ants[match[0]].predictionCorrection(np.array(meas_vects[match[2]]), None)
-                    #self.ants[match[0]].update(meas_vect)
+                #meas_vect, __ = self.ants[match[0]].predictionCorrection(np.array(meas_vects[match[2]]), None)
+                #self.ants[match[0]].update(meas_vect)
+                if match[2] < 0:
+                    self.ants[match[0]].update(self.ants[match[0]].getPoint())
+                else:
                     self.ants[match[0]].update(headings[match[2]])
-                    self.ants[match[0]].time[-1]=self.frameNumber
+                self.ants[match[0]].time[-1]=self.frameNumber
 
         self.frameNumber += 1
 
@@ -634,7 +633,6 @@ def main():
     tracker.trackAll()
     tracker.plotTracks()
     tracker.close()
-
 
 if __name__ == "__main__":
     main()

@@ -23,7 +23,7 @@ Train the model:
 ============  DEWARPING  =============
 ======================================
 
-Put video in ScrANTonTracker/Projects/<your project>
+Put video in ScrANTonTracker/Projects/<your project>/
 
 Save calibration data, so that it can be used to dewarp other videos
 ---------------------------------

@@ -13,44 +13,26 @@ Make sure the files are up-to-date from github:
 Now that the files have been updated, navigate into that folder
 > cd ScrANTonTracker
 
+Make sure conda environment is active
+> conda activate py37gpu
+
 Train the model:
 > python ./ants/ants.py train --dataset=./data/ant --weights=COCO
 
 ======================================
-==========  DEWARP MANUAL  ===========
+============  DEWARPING  =============
 ======================================
 
-Put video in ScrANTonTracker/Video
+Put video in ScrANTonTracker/Projects/<your project>
 
-Save calibration data on LAB, so that it can be used to dewarp other videos
+Save calibration data, so that it can be used to dewarp other videos
 ---------------------------------
 General:    python <py file path> "saveCalib" <projectName> <videoName> <dataFile = calibration_data>
-FilePath:   /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py
-Example:    python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py saveCalib sample sampleVid1
+FilePath:   /home/ant/ScrANTonTracker/Tracking/DewarpInterface.py
+Example:    python /home/antScrANTonTracker/Tracking/DewarpInterface.py saveCalib sample sampleVid1
 
 Run Dewarp on LAB from calibration data
 ---------------------------------
 General:    python <py file path> "dewarpVideo" <projectName> <videoName> <dataFile = calibration_data>
-FilePath:   /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py
-Example:    python /home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/Tracking/DewarpInterface.py saveCalib sample sampleVid1
-
-=====================================
-=======  Labelbox Conversion  =======
-=====================================
-Put the download in antsJSON
-Navigate to Labelbox/exporters/coco-exporter, then
-pipenv install
-pipenv run python main.py /home/simulation/Documents/COCOConversion/antsJSON/<filename>.json /home/simulation/Documents/COCOConversion/antsCOCONEW
-pipenv run python main.py /home/simulation/Documents/FreshNewBoi/COCOconv/antsJSON/antsJSON.json /home/simulation/Documents/FreshNewBoi/COCOconv/antsCOCO
-
-
-=====================================
-=============  Github  ==============
-=====================================
-Navigate to Github/ScrANtonTracker folder in Documents
-sudo git add .
-sudo git commit -m "description"
-sudo git push
-
-File permissions: Make simulation the owner of all files in github
-sudo chown -R simulation /home/simulation/Documents/Github/
+FilePath:   /home/ant/ScrANTonTracker/Tracking/DewarpInterface.py
+Example:    python /home/ant/ScrANTonTracker/Tracking/DewarpInterface.py saveCalib sample sampleVid1

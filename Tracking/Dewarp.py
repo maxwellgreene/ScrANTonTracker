@@ -1,13 +1,12 @@
 #import matplotlib.pyplot as plt
 import Calibration as Cal
 import cv2
-#import sys
+import os
 import numpy as np
 
 def makeUndestortMeta():
-
     #Import Information
-    filename = '/home/simulation/Documents/Github/ScrANTonTracker/Video/AntTest1/Test1.MP4'
+    filename = os.path.join(os.getcwd(),'/Projects/sampleAnt/AntTest.MP4')
     #Input the number of board images to use for calibration (recommended: ~20)
     n_boards = 4
     #Input the number of squares on the board (width and height)
@@ -25,7 +24,6 @@ def makeUndestortMeta():
     crop = 1
 
     sc = .25 #rescaling factor so that images fit on the screen
-
 
     print("Starting camera calibration....")
     print("Step 1: Image Collection")
@@ -48,9 +46,10 @@ def makeUndestortMeta():
 
 
 class DewarpVideoCapture:
-    def __init__(self, a_filename,
-                 a_calibration_file='calibration_data.npz'):
-        print("starting")
+    def __init__(self, a_filename,a_calibration_file='calibration_data.npz'):
+        print("===========================")
+        print("===== Dewarping Video =====")
+        print("===========================")
         # call the constructor form cv2.videoCapture
         self.cap = cv2.VideoCapture(a_filename)
 
@@ -87,4 +86,3 @@ class DewarpVideoCapture:
         dewarped_image = cv2.remap(image, self.mapx, self.mapy, cv2.INTER_LINEAR)
         return success, dewarped_image
         """
-

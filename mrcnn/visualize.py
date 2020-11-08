@@ -46,7 +46,7 @@ def overlay(images, titles=None, cols=4, cmap=None, norm=None,
     titles = titles if titles is not None else [""] * len(images)
     rows = len(images) // cols + 1
     plt.Figure(figsize=(14, 14 * rows // cols))
-    
+
     i = 1
     for image, title in zip(images, titles):
         plt.subplot(rows, cols, i)
@@ -128,7 +128,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     colors: (optional) An array or colors to use with each object
     captions: (optional) A list of strings to use as captions for each object
     """
-    
+
     # Number of instances
     N = boxes.shape[0]
     if not N:
@@ -140,7 +140,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     auto_show = False
     if not ax:
         _, ax = plt.subplots(1, figsize=figsize)
-        auto_show = True
+        #auto_show = True
 
     # Generate random colors
     colors = colors or random_colors(N)
@@ -158,7 +158,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
 
         # Bounding box
         if not np.any(boxes[i]):
-            # Skip this instance. Has no bbox. Likely lost in image cropping. 
+            # Skip this instance. Has no bbox. Likely lost in image cropping.
             continue
         y1, x1, y2, x2 = boxes[i]
         if show_bbox:
@@ -197,6 +197,8 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     ax.imshow(masked_image.astype(np.uint8))
     if auto_show:
         plt.show()
+    else:
+        return(plt)
     #plt.show()
 
 def display_differences(image,

@@ -23,6 +23,9 @@ import skimage.draw
 import urllib.request
 import skimage.io
 
+import warnings
+warnings.filterwarnings('ignore')
+
 import pycocotools
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -36,9 +39,6 @@ ROOT_DIR = os.getcwd()
 sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
-
-import warnings
-warnings.filterwarnings('ignore')
 
 # Path to trained weights file
 COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, r"mask_rcnn_coco.h5")

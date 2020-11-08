@@ -1,5 +1,7 @@
 #import matplotlib
 #matplotlib.use("TkAgg")
+import warnings
+warnings.filterwarnings("ignore")
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +10,7 @@ import glob
 import matplotlib.pyplot as plt
 from shapely.geometry.polygon import LinearRing, Polygon
 from shapely.geometry import LineString, Point
+import skimage
 import statistics
 import Dewarp
 import os
@@ -15,12 +18,31 @@ import sys
 import math
 import re
 import time
+import logging
 import tensorflow as tf
+import Calibration
+import MaskRCNN_TensorFlow
+
+from pprint import pprint
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.autograph.set_verbosity(0)
+
+# Root directory of the project
+ROOT_DIR = os.path.abspath(os.getcwd())
+
+# Import Mask RCNN
+sys.path.append(ROOT_DIR)  # To find local version of the library
+from mrcnn import utils
+import mrcnn.model as modellib
+from mrcnn import visualize
+# Import ant configs
+from ants import ants
 
 #This function is useful for viewing the differnt stages of the ant extraction process
 def print_im(a_pic):
-    pic2Display = cv2.resize(a_pic, (800, 800))
-    cv2.imshow('image', pic2Display)
+    #pic2Display = cv2.resize(a_pic, (800, 800))
+    cv2.imshow('image', apic)
     k = cv2.waitKey(0)
 
 #This function makes a image with the region inside the polygons set to white
@@ -144,7 +166,9 @@ class Filter:
 
 class ant(Filter):
     def __init__(self, dt, a_initialState):
-        self.xk = a_initialState
+
+        #self.xk = a_initialState
+        self.xk = self.toPoint(a_initialState)
 
         self.Pk = np.array([[20000, 0, 0, 0, 0],
                             [0, 20000, 0, 0, 0],
@@ -176,23 +200,62 @@ class ant(Filter):
                            [0, 0, 0, 1, 0],
                            [0, 0, 0, 0, 1]])
 
+        self.lengths = []
+        self.widths = []
+        self.thetas = []
+        self.areas = []
+
         self.state_vars = []
         self.state_covars = []
         self.meas_vars = []
         self.xs = []
         self.ys = []
         self.time = []
-        self.add_point(a_initialState, 0)
+        self.add_point(self.xk, 0)
+
+    def toHead(self, a_temp):
+        if type(a_temp) is dict:
+            return a_temp
+        else:
+            point = a_temp
+            head = {
+                "a":point[3]*point[4],
+                "x":point[0],
+                "y":point[1],
+                "w":point[4],
+                "l":point[3],
+                "t":point[2]
+            }
+            return head
+
+    def toPoint(self, a_temp):
+        if type(a_temp) is dict:
+            head = a_temp
+            point = [head['x'],head['y'],head['t'],head['l'],head['w']]
+            return(point)
+        else:
+            return(a_temp)
 
     def update_extra(self):
         self.add_point(self.xk, 0)
 
+    def update(self, a_pointOhead):
+        super().update(self.toPoint(a_pointOhead))
+
     def get_distance(self, a_point):
         return np.sqrt((self.xs[-1] - a_point[0]) ** 2 + (self.ys[-1] - a_point[1]) ** 2)
 
-    def add_point(self, a_point, a_time):
-        self.xs.append(a_point[0])
-        self.ys.append(a_point[1])
+    def add_point(self, a_pointOhead, a_time):
+        point = self.toHead(a_pointOhead)
+        #self.xs.append(a_point[0])
+        #self.ys.append(a_point[1])
+        self.xs.append      (point['x'])
+        self.ys.append      (point['y'])
+        self.lengths.append (point['l'])
+        self.widths.append  (point['w'])
+        self.thetas.append  (point['t'])
+        self.areas.append   (point['a'])
+
         self.time.append(a_time)
 
     def predictionCorrection(self, a_xp, a_Pp):
@@ -225,474 +288,309 @@ class ant(Filter):
         self.state_covars.append(a_Pk)
         return a_xk, a_Pk
 
+# Create a MASKRCNN class with a modified detect function
+# that can be passed a list of ants to update
+class detectorMaskRCNN(modellib.MaskRCNN):
+    def __init__(self, mode, config, model_dir):
+        """
+        mode: Either "training" or "inference"
+        config: A Sub-class of the Config class
+        model_dir: Directory to save training logs and trained weights
+        """
+        assert mode in ['training', 'inference']
+        self.mode = mode
+        self.config = config
+        self.model_dir = model_dir
+        self.set_log_dir()#self.model_dir)
+        self.keras_model = self.build(mode=mode, config=config)
+    #
+    # def detect(self, images, ants, verbose=0):
+    #     """
+    #     Runs the detection pipeline.
+    #
+    #     images: List of images, potentially of different sizes.
+    #
+    #     Returns a list of dicts, one dict per image. The dict contains:
+    #     rois: [N, (y1, x1, y2, x2)] detection bounding boxes
+    #     class_ids: [N] int class IDs
+    #     scores: [N] float probability scores for the class IDs
+    #     masks: [H, W, N] instance binary masks
+    #     """
+    #
+    #     assert self.mode == "inference", "Create model in inference mode."
+    #     assert len(images) == self.config.BATCH_SIZE, "len(images) must be equal to BATCH_SIZE"
+    #
+    #     if verbose:
+    #         log("Processing {} images".format(len(images)))
+    #         for image in images:
+    #             log("image", image)
+    #
+    #     # Mold inputs to format expected by the neural network
+    #     molded_images, image_metas, windows = self.mold_inputs(images)
+    #     if debugPrint: print("windows1: ",windows)
+    #
+    #     # Validate image sizes
+    #     # All images in a batch MUST be of the same size
+    #     image_shape = molded_images[0].shape
+    #     for g in molded_images[1:]:
+    #         assert g.shape == image_shape,\
+    #             "After resizing, all images must have the same size. Check IMAGE_RESIZE_MODE and image sizes."
+    #     if debugPrint: print("windows2: ",windows)
+    #
+    #     # Anchors
+    #     anchors = self.get_anchors(image_shape)
+    #     # Duplicate across the batch dimension because Keras requires it
+    #     anchors = np.broadcast_to(anchors, (self.config.BATCH_SIZE,) + anchors.shape)
+    #
+    #     if verbose:
+    #         log("molded_images", molded_images)
+    #         log("image_metas", image_metas)
+    #         log("anchors", anchors)
+    #     # Run object detection
+    #     detections, _, _, mrcnn_mask, _, _, _ =\
+    #         self.keras_model.predict([molded_images, image_metas, anchors], verbose=2)
+    #
+    #     # Process detections
+    #     if debugPrint: print("windows3: ",windows)
+    #     results = []
+    #     for i, image in enumerate(images):
+    #         final_rois, final_class_ids, final_scores, final_masks =\
+    #             self.unmold_detections(detections[i], mrcnn_mask[i],
+    #                                    image.shape, molded_images[i].shape,
+    #                                    windows[i])
+    #         if debugPrint: print("final_rois: ",final_rois)
+    #         results.append({
+    #             "rois": final_rois,
+    #             "class_ids": final_class_ids,
+    #             "scores": final_scores,
+    #             "masks": final_masks,
+    #         })
+    #         print(results)
+    #     if debugPrint: print("windows4: ",windows)
+    #     return results
 
-#class extractorTH:
-#    def __init__(self):
-#        self.num_ants = None
-#        self.antsWithCont = []
-#        self.antsWithoutCont = []
-#        self.thresh = 145
-#        self.thresh_shift = 0
-#        self.valid_contours = []
-#        self.m = 0
-#        self.M = 255
-#
-#    def set_ant_num(self, a_num_ants):
-#        """ Used to manualy set the nuymber of ants.
-#        Latter we should add in the abilty to do this manualy on the first frame
-#        if it has not been set manualy"""
-#        # if isinstance(x, int):
-#        self.num_ants = a_num_ants
-#
-#    def get_num_ants(self):
-#        num_ants = int(input("How many ants are there? \n"))
-#        self.set_ant_num(num_ants)
-#
-#    def get_len_width(self, a_box):
-#        p1 = a_box[0]
-#
-#        distances = []
-#        for p in a_box[1:]:
-#            d = np.sqrt((p[0] - p1[0]) ** 2 + (p[1] - p1[1]) ** 2)
-#            distances.append(d)
-#
-#        distances.sort()
-#        return distances[:-1]
-#
-#    def get_len_width_theta(self, a_box):
-#
-#        p1 = a_box[0]
-#
-#        distances = []
-#        thetas = []
-#
-#        for p in a_box[1:]:
-#            dx = p[0] - p1[0]
-#            dy = p[1] - p1[1]
-#            if dx == 0:
-#               thetas.append(90.0)
-#            else:
-#                thetas.append(np.arctan(dy / dx) * 180 / 3.14159)
-#
-#            distances.append(np.sqrt(dx ** 2 + dy ** 2))
-#
-#        out = sorted(zip(distances, thetas))
-#        distances, thetas = zip(*out)
-#        return distances[0], distances[1], thetas[1]
-#
-#    def get_corners(self, length, width, theta, center_x, center_y, scale):
-#        xt = scale * length / 2 * np.cos(theta * 3.14159 / 180)
-#        yt = scale * length / 2 * np.sin(theta * 3.14159 / 180)
-#
-#        xs = scale * width / 2 * np.cos((theta + 90) * 3.14159 / 180)
-#        ys = scale * width / 2 * np.sin((theta + 90) * 3.14159 / 180)
-#
-#        p1 = [int(center_x + xt + xs), int(center_y + yt + ys)]
-#        p2 = [int(center_x + xt - xs), int(center_y + yt - ys)]
-#        p3 = [int(center_x - xt - xs), int(center_y - yt - ys)]
-#        p4 = [int(center_x - xt + xs), int(center_y - yt + ys)]
-#
-#        return np.array([p1, p2, p3, p4])
-#
-#    def make_markers(self, ants, a_frame):
-#        x, y = a_frame.shape  # I did
-#        markers = np.zeros((x, y), np.uint8)
-#
-#        polys = []
-#        for ant in ants:
-#            tempMask = np.zeros((x, y), np.uint8)
-#            tempMask[a_frame > 0] = 255
-#
-#            xp, Pp = ant.predict(ant.xk, ant.Pk)
-#            length = xp[3]
-#            width = xp[4]
-#            theta = xp[2]
-#            center_x = xp[0]
-#            center_y = xp[1]
-#            box = self.get_corners(length, width, theta, center_x, center_y, .25)
-#            poly = Polygon(box)
-#
-#            antMask = mask_for_polygons([poly], a_frame.shape)
-#            tempMask[antMask == 0] = 0
-#
-#            if np.amax(tempMask) > 0:
-#                markers[tempMask > 0] = 255
-#            else:
-#                markers[antMask > 0] = 255
-#
-#            polys.append(poly)
-#
-#
-#        # make the unknown regions
-#        unknown = np.zeros((x, y), np.uint8)
-#        unknown[a_frame > 20] = 255
-#        mask = mask_for_polygons(polys, a_frame.shape)
-#        unknown[mask > 0] = 255
-#        # mask out the ant centers
-#        unknown[markers > 0] = 0
-#
-#        # make the final marker image
-#        # Marker labelling
-#        ret, markers = cv2.connectedComponents(markers)
-#        # Add one to all labels so that sure background is not 0, but 1
-#        markers = markers + 1
-#        # Now, mark the region of unknown with zero
-#        markers[unknown == 255] = 0
-#
-#        return markers
-#
-#    
-#
-#    def draw_boarders(self, ants, a_frame):
-#        for ant in ants:
-#            xp, Pp = ant.predict(ant.xk, ant.Pk)
-#            length = xp[3]
-#            width = xp[4]
-#            theta = xp[2]
-#            center_x = xp[0]
-#            center_y = xp[1]
-#            box = self.get_corners(length, width, theta, center_x, center_y, 1.)
-#
-#            cv2.drawContours(a_frame, [box], 0, (0, 0, 0), 2)
-#
-#        return a_frame
-#
-#    def makeBlobs(self, a_img):
-#        gray = a_img[:,:,0] #cv2.cvtColor(a_img, cv2.COLOR_BGR2GRAY)
-#        #clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(4,4))
-#        print_im(gray)
-#        gray = (255/(self.M-self.m))*(gray-self.m)
-#        gray[gray>255] = 255
-#        print('rescaled', self.m, self.M)
-#        print(np.min(gray), np.max(gray))
-#        g = gray.astype("uint8")
-#        gray = g
-#        print_im(gray)
-#
-#        # blurred = cv2.GaussianBlur(gray, (11, 11), 0)
-#
-#        ret, thresh = cv2.threshold(gray, self.thresh, 255, cv2.THRESH_BINARY_INV)
-#        
-#        """
-#        thresh2 = cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV,55,50)
-#        thresh3 = cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,55,50)
-#        print_im(thresh)
-#        print_im(thresh2)
-#        print_im(thresh3)
-#        """
-#        print("thresh")
-#        print_im(thresh)
-#        closedIM = self.close(thresh  , 5)
-#        """
-#
-#        # Perform the operation
-#        output = cv2.connectedComponentsWithStats(thresh, connectivity, cv2.CV_32S)
-#        # Get the results
-#        # The first cell is the number of labels
-#        num_labels = output[0]
-#        # The second cell is the label matrix
-#        labels = output[1]
-#        # The third cell is the stat matrix
-#        stats = output[2]
-#        # The fourth cell is the centroid matrix
-#        centroids = output[3]
-#        for ant in ants:
-#            tempMask = np.zeros((x, y), np.uint8)
-#            tempMask[a_frame > 0] = 255
-#
-#            xp, Pp = ant.predict(ant.xk, ant.Pk)
-#            length = xp[3]
-#            width = xp[4]
-#            theta = xp[2]
-#            center_x = xp[0]
-#            center_y = xp[1]
-#            box = self.get_corners(length, width, theta, center_x, center_y, .25)
-#            poly = Polygon(box)
-#
-#        """
-#        #print_im(closedIM)
-#        return closedIM
-#
-#
-#    def filterContours(self, a_contours):
-#        areas = []
-#        lens = []
-#
-#        # get info on all the connected components
-#        for i, cnt in enumerate(a_contours):
-#            area = cv2.contourArea(cnt)
-#
-#            rect = cv2.minAreaRect(cnt)
-#            box = cv2.boxPoints(rect)
-#            box = np.int0(box)
-#            w, l, theta = self.get_len_width_theta(box)
-#
-#            lens.append(l)
-#            areas.append(area)
-#
-#        if len(areas) ==0:
-#            return []
-#        median_len = statistics.median(lens)
-#        median_area = statistics.median(areas)
-#
-#        contours_out = []
-#
-#        for a, l, cnt in zip(areas, lens, a_contours):
-#            if 100 * a / median_area > 60 and 100 * l / median_len > 60:  # apply median filter
-#                contours_out.append(cnt)
-#
-#        return contours_out
-#
-#    def resetForRun(self):
-#        self.valid_contours = []
-#        self.antsWithCont = []
-#        self.antsWithoutCont = []
-#
-#    def findAnts(self, a_frame, a_ants, a_frame_num):
-#        allFound = False
-#
-#        if a_frame_num == 0:
-#            print_im(a_frame[:,:,0])
-#            #print_im(a_frame[:,:,1])
-#            #print_im(a_frame[:,:,2])
-#
-#        # make sure we know how many ants there should be.
-#        if self.num_ants is None:
-#            self.get_num_ants()
-#
-#        # reset the containers
-#        self.resetForRun()
-#
-#        count = 0
-#        ants2find = set(range(len(a_ants)))
-#        
-#        while not allFound:
-#            count += 1
-#            #print("the threshold is ", self.thresh)
-#            # Get the connected componenst of the threshold image
-#            closedIM = self.makeBlobs(a_frame)
-#            print_im(closedIM)
-#            # get the contours of the threhold blobs
-#            contours, hierarchy = cv2.findContours(closedIM, 1, 2)[-2:]
-#            #cv2.connectedComponentsWithStats(closedIM, 8, cv2.CV_32S)
-#
-#            #if len(contours) > self.num_ants:
-#            contours = self.filterContours(contours)
-#            print("we found ", len(contours), " ants")
-#
-#            # check how we did and adjust things if need
-#            if a_frame_num > 0:
-#                #if len(contours) == self.num_ants:  # everything is good on the first frame and we can proceed.
-#                self.valid_contours = contours
-#                allFound = True
-#                continue
-#                
-#                markers = self.make_markers(a_ants, closedIM)
-#                # plt.figure(figsize=(12, 4), dpi= 100, facecolor='w', edgecolor='k')
-#                # plt.imshow(markers)
-#                # plt.show()
-#                markers = cv2.watershed(a_frame, markers)
-#                #mset = np.unique(markers)
-#                #print(len(mset), " and the set is ", mset)
-#                
-#                #plt.figure(figsize=(12, 4), dpi= 100, facecolor='w', edgecolor='k')
-#                #plt.imshow(markers)
-#                #plt.show()
-#                allFound = True
-#
-#                for i in np.arange(2, np.amax(markers) + 1):
-#                    #print(i)
-#                    tmask = np.zeros(markers.shape, np.uint8)
-#                    tmask[markers == i] = 255;
-#
-#                    conts, hierarchy = cv2.findContours(tmask, 1, 2)[-2:]
-#                    self.valid_contours.append(conts[0])
-#                #print("len valid_conts", len(self.valid_contours))
-#            # if we are a on the first frame make sure we have the write number of ants
-#            if a_frame_num == 0 and len(contours) < self.num_ants:  # threshold is too low
-#                self.thresh += 1
-#                print("changeTheshUp")
-#            elif a_frame_num == 0 and len(contours) > self.num_ants:  # threshold is too high
-#                print("changeThesh down")
-#                self.thresh -= 1
-#            elif a_frame_num == 0:  # everything is good on the first frame and we can proceed.
-#                self.valid_contours = contours
-#                allFound = True
-#
-#            # if this fails then the frame is bad and we need to proceed without it
-#            if self.thresh <= 30 or self.thresh >= 230 or count >= 200:
-#                self.thresh = 90
-#                self.thresh_shift = 0
-#                return [], False
-#
-#        # print(len(contours))
-#        contours = self.valid_contours
-#
-#        areas = []
-#        boxes = []
-#        centers = []
-#        lens = []
-#        widths = []
-#        thetas = []
-#        meas_vecs = []
-#
-#        for i, cnt in enumerate(contours):
-#            area = cv2.contourArea(cnt)
-#
-#            rect = cv2.minAreaRect(cnt)
-#            box = cv2.boxPoints(rect)
-#            box = np.int0(box)
-#            w, l, theta = self.get_len_width_theta(box)
-#
-#            # compute the center of the contour
-#            M = cv2.moments(cnt)
-#            if M["m00"] < .0001: continue
-#            cx = int(M["m10"] / M["m00"])
-#            cy = int(M["m01"] / M["m00"])
-#            centers.append([cx, cy])
-#
-#            lens.append(l)
-#            widths.append(w)
-#            thetas.append(theta)
-#            areas.append(area)
-#            boxes.append(box)
-#
-#            # print('out', w,l,theta)
-#            meas_vecs.append([cx, cy, theta, l, w])
-#            cv2.drawContours(a_frame, [box], 0, (0, 0, 255), 2)
-#            # print_im(a_frame)
-#
-#
-#
-#        # print_im(a_frame)
-#        # print(len(meas_vecs))
-#        if len(meas_vecs) == self.num_ants:
-#            # print('good',len(keep_centers))
-#            return meas_vecs, True
-#        else:
-#            # print('bd',len(keep_centers))
-#            return meas_vecs, True
-#            #return [], False
-#
-#    def close(self, a_frame, a_size):
-#        kernel = np.ones((3, 3), np.uint8)
-#        erosion = cv2.erode(a_frame, kernel, iterations=2)
-#        #print_im(erosion)
-#        kernel = np.ones((a_size, a_size), np.uint8)
-#        #dilation = cv2.dilate(erosion, kernel, iterations=3)
-#        #print_im(dilation)
-#        return erosion
+# Create a config to use with the extractorMaskRCNN class
+class extractorConfig(ants.AntConfig):
+    GPU_COUNT = 1
+    IMAGES_PER_GPU = 1
+    DETECTION_MIN_CONFIDENCE = 0.3
 
-def extractorMaskRCNN(currentImage):
-    
+class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
+    def __init__(self,a_model_dir = None,a_weights_path = None):
+        # Directory to save logs and trained model
+        if a_model_dir: model_dir = a_model_dir
+        else:           model_dir = os.path.join(ROOT_DIR, "logs")
 
+        if a_weights_path:  WEIGHTS_PATH = a_weights_path
+        else:               WEIGHTS_PATH = os.path.join(ROOT_DIR,'models/TRAINEDFULLANTS824.h5')
 
+        self.config = extractorConfig()
+        #self.config.display()
 
+        # Create model object in inference mode.
+        self.model = detectorMaskRCNN(mode="inference", model_dir=model_dir, config=self.config)
 
+        #model.load_weights(MODEL_PATH, by_name=True)
+        self.model.load_weights(WEIGHTS_PATH, by_name=True)
+
+    def findAnts(self, image, ants):
+        #try: image = skimage.io.imread(a_file_name)
+        #except e: return None, None
+
+        results = self.model.detect([image], verbose=0)
+        r = results[0]
+
+        # convert image to open_cv so it works with what we have already done
+        # cv_image = skimage.img_as_ubyte(image)
+        # cv_image = np.ubyte(image)
+
+        """ Input:
+        a list of dicts, one dict per image. The dict contains:
+
+        rois: [N, (y1, x1, y2, x2)] detection bounding boxes
+        class_ids: [N] int class IDs
+        scores: [N] float probability scores for the class IDs
+        masks: [H, W, N] instance binary masks
+        """
+
+        antLocs = []
+        class_ids = ['BG', 'Full Ant', 'Abdomen', 'Thorax', 'Head']
+
+        for i in range((r['masks'].shape[2])):
+            #For now, check if the class_id is full ant
+            if class_ids[r['class_ids'][i]] == 'Full Ant':
+                mask = r['masks'][:,:,i]
+                contours, _ = cv2.findContours(mask.astype('uint8'), mode = cv2.RETR_LIST, method = cv2.CHAIN_APPROX_SIMPLE)
+                cnt = contours[0]
+                ellipse = cv2.fitEllipse(cnt)
+                antLocs.append({
+                    "a":cv2.contourArea(cnt),
+                    "x":ellipse[0][0],
+                    "y":ellipse[0][1],
+                    "w":ellipse[1][0],
+                    "l":ellipse[1][1],
+                    "t":ellipse[2]
+                })
+
+                # areas.append(cv2.contourArea(cnt))
+                # cx.append(ellipse[0][0])
+                # cy.append(ellipse[0][1])
+                # ws.append(ellipse[1][0])
+                # ls.append(ellipse[1][1])
+                # thetas.append(ellipse[2])
+        ##########################
+
+        """
+        Output:
+
+        Headings, a list of dicts, each of the form:
+        {
+            "a":area,
+            "x":center x coord,
+            "y":center y coord,
+            "w":width,
+            "l":length,
+            "t":theta
+        }
+        """
+
+        vis = None #
+        visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
+
+        #should return a list of the form: [cx, cy, theta, l, w]
+        return vis, antLocs #[cx,cy,thetas,ls,ws] #self.reformat(r['rois'],r['masks'], r['scores'], r['class_ids']), cv_image[:,:,::-1]
 
 class antTracker:
     def __init__(self):
         self.dt = 1
-        self.extractor = extractorTH()
+        self.extractortype = "MaskRCNN"
+        if self.extractortype == "Threshhold":
+            self.extractor = extractorTH
+        else:
+            self.extractor = extractorMaskRCNN()
         self.ants = []
+        self.frames = []
+
         self.colors = ['r', 'g', 'b', 'k', 'm']
 
     def setup(self, a_vidName, a_calib_file):
         self.vidName = a_vidName
         # Opens the video import and sets parameters
         self.cap = Dewarp.DewarpVideoCapture(a_vidName, a_calib_file)
+        width, height = (self.xCrop[1]-self.xCrop[0],self.yCrop[1]-self.yCrop[0])
         self.frameNumber = 0
 
     def setCrop(self, a_xCrop, a_yCrop):
         self.xCrop = a_xCrop
         self.yCrop = a_yCrop
 
-    def plotTracks(self):
-        fig0 = plt.figure(figsize=(12, 10), dpi=100, facecolor='w', edgecolor='k')
-
-        for i, a in enumerate(self.ants):
-            plt.plot(a.xs, a.ys)  # , self.colors[i])
-        plt.show()
+    def plotTracks(self, overFrames = False):
+        if not overFrames:
+            fig0 = plt.figure(figsize=(12, 10), dpi=100, facecolor='w', edgecolor='k')
+            for i, a in enumerate(self.ants):
+                plt.plot(a.xs, a.ys )#, self.colors[i])
+            plt.show()
 
     def trackAll(self):
         print('tracking object in all frames')
         moreFrames = True
         while moreFrames:
-            print(self.frameNumber)
+            #print(self.frameNumber)
             moreFrames = self.processNextFrame()
-            #if self.frameNumber >= 10:
-            #    moreFrames = False
-
+            if self.frameNumber >= 100:
+                moreFrames = False
 
     def processNextFrame(self):
         print('processing frame {}'.format(self.frameNumber))
 
         ret, cur_frame = self.cap.read()
-        if (type(cur_frame) == type(None)):
-            return True
+        if not ret:
+            return False #True
 
         cur_frame = cur_frame[self.yCrop[0]:self.yCrop[1], self.xCrop[0]:self.xCrop[1], :]
 
-        # Create the basic black image 
-        #mask = np.zeros(cur_frame.shape, dtype = "uint8")
-        #cv2.circle(mask, (900,900), 900, (255,255,255), -1)
-        #cur_frame = cv2.bitwise_and(cur_frame, mask)weights_path = "/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB" 
-        self.extractor.M = np.max(cur_frame[:,:,0])
-        self.extractor.m = np.min(cur_frame[:,:,0])                           
-        mask = 255*np.ones(cur_frame.shape, dtype = "uint8")
-        cv2.circle(mask, (455,455), 455, (0,0,0), -1)
-        cur_frame = cv2.bitwise_or(cur_frame, mask)        
-
-        #=======================================================
-        #=======================================================
-        #=======================================================
-        meas_vecs, good = self.extractor.findAnts(cur_frame, self.ants, self.frameNumber)
-        
+        #===================== Threshold =======================
+        # Create the basic black image
+        # mask = np.zeros(cur_frame.shape, dtype = "uint8")
+        # cv2.circle(mask, (900,900), 900, (255,255,255), -1)
+        # cur_frame = cv2.bitwise_and(cur_frame, mask)
+        # self.extractor.max = np.max(cur_frame[:,:,0])
+        # self.extractor.min = np.min(cur_frame[:,:,0])
+        # mask = 255*np.ones(cur_frame.shape, dtype = "uint8")
+        # cv2.circle(mask, (455,455), 455, (0,0,0), -1)
+        # cur_frame = cv2.bitwise_or(cur_frame, mask)
+        # meas_vecs, good = self.extractor.findAnts(cur_frame, self.ants, self.frameNumber)
         # meas_vecs.append([cx, cy, theta, l, w])
         #=======================================================
+
+        #===================== Mask RCNN =======================
+        frame, headings = self.extractor.findAnts(cur_frame, self.ants)
+
+        """headings is of the form:
+        {
+            "a":area,
+            "x":center x coord,
+            "y":center y coord,
+            "w":width,
+            "l":length,
+            "t":theta
+        }
+        """
         #=======================================================
-        #=======================================================
-        if not good:
-            print('not good')
-            self.frameNumber+=1
-            return True
 
         if self.frameNumber == 0:
             print('first iteration')
-            for meas_vec in meas_vecs:
-                antNew = ant(self.dt, np.array(meas_vec))
+            for heading in headings:
+                antNew = ant(self.dt, heading)
                 self.ants.append(antNew)
         else:
-            print('another iteration')
-            print(len(meas_vecs))
+            print('frame number: ',self.frameNumber,' ants found: ',len(headings))
+            pprint(self.ants[0])
+            #pprint(headings[0])
+
             used = set()
             remaining = set(range(len(self.ants)))
-            #matchInf = {}
             matchInf = []
 
             #if len(self.ants) != len(meas_vecs):
             #    print(len(ants), len(meas_vecs), "  There was a problem")
-            #    print(bob)
+
             while len(remaining) > 0:
                 dists = []
                 i = list(remaining)[0] #ant ind
-                for meas_vec in meas_vecs:
-                    # print(meas_vec)
-                    dist = self.ants[i].get_distance(np.array(meas_vec))
+                print("remaining:")
+                pprint(remaining)
+                for j, heading in enumerate(headings):
+                    #print("Comparing heading : ",j," to ant : ",i)
+                    #pprint(heading)
+                    #pprint([self.ants[i].xs[-1],self.ants[i].ys[-1],self.ants[i].thetas[-1]])
+
+                    dist = self.ants[i].get_distance((heading['x'],heading['y']))
                     dists.append(dist)
-                    
+
                 matchedInd = np.argmin(dists)
-                matchInf.append( [i, np.min(dists), matchInd])
+                #print("distances: ",dists)
+                #print("matchedInd: ",matchedInd)
+                #print("matched index: ",matchedInd)
+
+                matchInf.append([i, np.min(dists), matchedInd])
+                #matchInf[matchedInd] = [i,np.min(dists)]
+
+                print("Match Inf: ")
+                pprint(matchInf)
+
+                remaining.remove(i)
+
                 """
                 sortingStuff = True
                 while sortingStuff:
                     matchedInd = np.argmin(dists) #contour ind
                     #check if it has already be assigned
                     if matchedInd in used:
-                        #is the previouse assignment better?
-                        if np.min(dists) >= matchInf[matchedInd][1]:
+                        #is the previous assignment better?
+                        #if np.min(dists) >= matchInf[matchedInd][1]:
+                        if np.min(dists) >= matchInf[np.where(matchInf)][2]
                             dists[matchedInd] = 9999999  # make it large so we dont find it again
-                          
                         else: #if not lets change it
                             #add back the old index
                             remaining.add(matchInf[matchedInd][0])
@@ -700,22 +598,23 @@ class antTracker:
                             matchInf[matchedInd] = [i, np.min(dists)]
                             remaining.remove(i)
                             sortingStuff = False
-
                     else:
                         used.add(matchedInd)
-                        matchInf[matchedInd] = [i, np.min(dists)]
+                        #matchInf[matchedInd] = [i,np.min(dists)]
+                        matchInf.append([i, np.min(dists), matchedInd])
                         remaining.remove(i)
                         sortingStuff = False
                 """
-            for  match in matchInf:#.items():
-                    meas_vec, __ = self.ants[match[0]].predictionCorrection(np.array(meas_vecs[match[2]]), None)
-                    self.ants[match[0]].update(meas_vec)
+
+            for match in matchInf:#.items():
+                    #meas_vect, __ = self.ants[match[0]].predictionCorrection(np.array(meas_vects[match[2]]), None)
+                    #self.ants[match[0]].update(meas_vect)
+                    self.ants[match[0]].update(headings[match[2]])
                     self.ants[match[0]].time[-1]=self.frameNumber
-                    
+
         self.frameNumber += 1
 
-        frame = self.extractor.draw_boarders(self.ants, cur_frame)
-        print_im(frame)
+        #self.frames.append(image)
 
         return True
 
@@ -723,29 +622,15 @@ class antTracker:
         cv2.destroyAllWindows()
         self.cap.cap.release()
 
-
-
 def main():
     #Import Information
-    projectName = 'AntTest1'
-    readNameVideo = os.path.join(projectName,'Calibration.MP4') #PROJNAME/FILENAME.MP4
-    writeNameVideo = os.path.join(projectName,'DewarpCalibration.MP4') #PROJNAME/FILENAME.MP4
-    
-    PROJECT_DIR = '/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/'
-    VIDEO_DIR = '/home/simulation/Documents/Github/ScrANTonTracker/Projects/'
-    
-    readPathVideo = os.path.join(VIDEO_DIR,readNameVideo)
-    tempDir = os.path.join(PROJECT_DIR,'Tracking/tempdata/')
-    writePathData = os.path.join(VIDEO_DIR,projectName)
-    dataName = os.path.join(writePathData,'calibration_data.npz')
-    writePathVideo = os.path.join(VIDEO_DIR,writeNameVideo)
-    
-    filename = readPathVideo
-    calib_file = dataName
+    PROJECT_DIR = os.path.join(os.getcwd(),'Projects/sampleAnt')
+    VIDEO_PATH = os.path.join(PROJECT_DIR,'AntTest.MP4')
+    CALIB_DATA_PATH = os.path.join(PROJECT_DIR,'calibration_data.npz')
 
     tracker = antTracker()
-    tracker.setup(filename, calib_file)
-    tracker.setCrop([0, 3840], [0, 2160]) #([x_min,y_max],[y_min,y_max])
+    tracker.setCrop([1250, 2850], [200, 2500])
+    tracker.setup(VIDEO_PATH, CALIB_DATA_PATH)
     tracker.trackAll()
     tracker.plotTracks()
     tracker.close()

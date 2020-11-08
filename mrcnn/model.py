@@ -6,6 +6,9 @@ Copyright (c) 2017 Matterport, Inc.
 Licensed under the MIT License (see LICENSE for details)
 Written by Waleed Abdulla
 """
+import warnings
+warnings.filterwarnings("ignore")
+
 import tensorflow as tf
 import os
 import random
@@ -13,6 +16,9 @@ import datetime
 import re
 import math
 import logging
+
+
+
 from collections import OrderedDict
 import multiprocessing
 import numpy as np
@@ -693,7 +699,6 @@ class DetectionTargetLayer(KE.Layer):
     def compute_mask(self, inputs, mask=None):
         return [None, None, None, None]
 
-
 ############################################################
 #  Detection Layer
 ############################################################
@@ -1086,7 +1091,7 @@ def rpn_bbox_loss_graph(config, target_bbox, rpn_match, rpn_bbox):
                                    config.IMAGES_PER_GPU)
 
     loss = smooth_l1_loss(target_bbox, rpn_bbox)
-    
+
     loss = K.switch(tf.size(loss) > 0, K.mean(loss), tf.constant(0.0))
     return loss
 
@@ -1305,7 +1310,8 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
 
 
 def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, config):
-    """Generate targets for training Stage 2 classifier and mask heads.
+    """
+    Generate targets for training Stage 2 classifier and mask heads.
     This is not used in normal training. It's useful for debugging or to train
     the Mask RCNN heads without using the RPN head.
 
@@ -1572,7 +1578,8 @@ def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
 
 
 def generate_random_rois(image_shape, count, gt_class_ids, gt_boxes):
-    """Generates ROI proposals similar to what a region proposal network
+    """
+    Generates ROI proposals similar to what a region proposal network
     would generate.
 
     image_shape: [Height, Width, Depth]
@@ -1648,7 +1655,8 @@ def generate_random_rois(image_shape, count, gt_class_ids, gt_boxes):
 def data_generator(dataset, config, shuffle=True, augment=False, augmentation=None,
                    random_rois=0, batch_size=1, detection_targets=False,
                    no_augmentation_sources=None):
-    """A generator that returns images and corresponding target class ids,
+    """
+    A generator that returns images and corresponding target class ids,
     bounding box deltas, and masks.
 
     dataset: The Dataset object to pick data from
@@ -1836,8 +1844,8 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
 ############################################################
 
 class MaskRCNN():
-    """Encapsulates the Mask RCNN model functionality.
-
+    """
+    Encapsulates the Mask RCNN model functionality.
     The actual Keras model is in the keras_model property.
     """
 
@@ -2455,12 +2463,12 @@ class MaskRCNN():
         scores: [N] Float probability scores of the class_id
         masks: [height, width, num_instances] Instance masks
         """
-        
+
         # How many detections do we have?
         # Detections array is padded with zeros. Find the first class_id == 0.
         zero_ix = np.where(detections[:, 4] == 0)[0]
         N = zero_ix[0] if zero_ix.shape[0] > 0 else detections.shape[0]
-        if debugPrint: print("FIRST NNNNNNNNNNN: ",N)
+        if debugPrint: print("FIRST N: ",N)
 
         # Extract boxes, class_ids, scores, and class-specific masks
         boxes = detections[:N, :4]
@@ -2476,19 +2484,19 @@ class MaskRCNN():
         window = utils.norm_boxes(window, image_shape[:2])
         if debugPrint: print("windowafter: ",window)
         if debugPrint: print("image_shape[:2]: ",image_shape[:2])
-        
+
         wy1, wx1, wy2, wx2 = window
         shift = np.array([wy1, wx1, wy1, wx1])
         if debugPrint: print("shift: ",shift)
         wh = wy2 - wy1  # window height
         ww = wx2 - wx1  # window width
-        
+
         scale = np.array([wh, ww, wh, ww])
         if debugPrint: print("scale: ",scale)
         # Convert boxes to normalized coordinates on the window
         if debugPrint: print("boxes before divide: ",boxes)
         boxes = np.divide(boxes - shift, scale)
-        
+
         # Convert boxes to pixel coordinates on the original image
         if debugPrint: print("boxes before denorm: ",boxes)
         if debugPrint: print("original_image_shape[:2] before denorm: ",original_image_shape[:2])
@@ -2505,10 +2513,10 @@ class MaskRCNN():
             scores = np.delete(scores, exclude_ix, axis=0)
             masks = np.delete(masks, exclude_ix, axis=0)
             N = class_ids.shape[0]
-            
+
         if debugPrint: print("class_ids2: ",class_ids)
         if debugPrint: print("boxes after zero area: ",boxes)
-        if debugPrint: print("SECOND NNNNNNNNNNN: ",N)
+        if debugPrint: print("SECOND N: ",N)
 
         # Resize masks to original image size and set boundary threshold.
         full_masks = []
@@ -2516,14 +2524,15 @@ class MaskRCNN():
             # Convert neural network mask to full size mask
             full_mask = utils.unmold_mask(masks[i], boxes[i], original_image_shape)
             full_masks.append(full_mask)
-            
+
         full_masks = np.stack(full_masks, axis=-1)\
             if full_masks else np.empty(original_image_shape[:2] + (0,))
 
         return boxes, class_ids, scores, full_masks
 
     def detect(self, images, verbose=0):
-        """Runs the detection pipeline.
+        """
+        Runs the detection pipeline.
 
         images: List of images, potentially of different sizes.
 
@@ -2533,7 +2542,7 @@ class MaskRCNN():
         scores: [N] float probability scores for the class IDs
         masks: [H, W, N] instance binary masks
         """
-        
+
         assert self.mode == "inference", "Create model in inference mode."
         assert len(images) == self.config.BATCH_SIZE, "len(images) must be equal to BATCH_SIZE"
 
@@ -2553,6 +2562,7 @@ class MaskRCNN():
             assert g.shape == image_shape,\
                 "After resizing, all images must have the same size. Check IMAGE_RESIZE_MODE and image sizes."
         if debugPrint: print("windows2: ",windows)
+
         # Anchors
         anchors = self.get_anchors(image_shape)
         # Duplicate across the batch dimension because Keras requires it
@@ -2564,8 +2574,8 @@ class MaskRCNN():
             log("anchors", anchors)
         # Run object detection
         detections, _, _, mrcnn_mask, _, _, _ =\
-            self.keras_model.predict([molded_images, image_metas, anchors], verbose=2)
-        
+            self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
+
         # Process detections
         if debugPrint: print("windows3: ",windows)
         results = []
@@ -2581,7 +2591,7 @@ class MaskRCNN():
                 "scores": final_scores,
                 "masks": final_masks,
             })
-            print(results)
+            if debugPrint: print(results)
         if debugPrint: print("windows4: ",windows)
         return results
 

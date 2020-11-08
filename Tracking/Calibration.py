@@ -12,12 +12,12 @@ except NameError:
     xrange = range
 
 #Import Information
-projectName = 'sample'
+projectName = 'sampleAnt'
 readNameVideo = os.path.join(projectName,'sampleVid1.MP4') #PROJNAME/FILENAME.MP4
 writeNameVideo = os.path.join(projectName,('DewarpedsampleVid1.MP4')) #PROJNAME/FILENAME.MP4
 
-PROJECT_DIR = '/home/simulation/Documents/Github/ScrANTonTracker/ScrANTonTrackerLAB/'
-VIDEO_DIR = '/home/simulation/Documents/Github/ScrANTonTracker/Projects/'
+PROJECT_DIR = os.getcwd()
+VIDEO_DIR = os.path.join(PROJECT_DIR,'Projects')
 
 readPathVideo = os.path.join(VIDEO_DIR,readNameVideo)
 tempDir = os.path.join(PROJECT_DIR,'Tracking/tempdata/')
@@ -35,9 +35,9 @@ board_dim = 20
 #Image resolution
 image_size = (3840,2160)#(1920, 1080)
 
-#Crop mask 
+#Crop mask
 # A value of 0 will crop out all the black pixels.  This will result in a loss of some actual pixels.
-# A value of 1 will leave in all the pixels.  This maybe useful if there is some important information 
+# A value of 1 will leave in all the pixels.  This maybe useful if there is some important information
 # at the corners.  Ideally, you will have to tweak this to see what works for you.
 crop = 1
 
@@ -92,7 +92,7 @@ def ImageCollect(filepath,a_tempDir = tempDir):
             img = cv2.resize(image, (0,0),fx=sc,fy=sc, interpolation=cv2.INTER_NEAREST)
             cv2.imshow('Original Video', img)
             k = cv2.waitKey(int(FrameDuration)) #You can change the playback speed here
-            if collected_images == n_boards: 
+            if collected_images == n_boards:
                 break
             if k == 32:
                 collected_images += 1
@@ -100,7 +100,7 @@ def ImageCollect(filepath,a_tempDir = tempDir):
                 print(str(collected_images) + ' / ' + str(n_boards) + ' images collected.')
             if k == 27:
                 break
-    
+
         #Clean up
         video.release()
         cv2.destroyAllWindows()
@@ -132,7 +132,7 @@ def ImageCollect(filepath,a_tempDir = tempDir):
 #close to zero.
 
 #Finally the function will go through the calbration images and display the undistorted image.
-    
+
 def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_data'),a_tempDir = tempDir):
     #Initializing variables
     board_n = board_w * board_h
@@ -150,14 +150,14 @@ def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_da
 
     #Loop through the images.  Find checkerboard corners and save the data to ipts.
     for i in range(1, n_boards + 1):
-    
+
         #Loading images
         print( 'Loading... Calibration_Image' + str(i) + '.png')
         image = cv2.imread(os.path.join(a_tempDir,('Calibration_Image' + str(i) + '.png')))
-        
+
         #Converting to grayscale
         grey_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        
+
         #Find chessboard corners
         found, corners = cv2.findChessboardCorners(grey_image, (board_w,board_h),flags=cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE)
 
@@ -172,7 +172,7 @@ def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_da
 
             #Draw chessboard corners
             cv2.drawChessboardCorners(image, (board_w, board_h), corners, found)
-        
+
             #Show the image with the chessboard corners overlaid.
             img = cv2.resize(image, (0,0), fx=sc,fy=sc,interpolation=cv2.INTER_NEAREST)
             cv2.imshow("Corners", img)
@@ -180,7 +180,7 @@ def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_da
         char = cv2.waitKey(10)
 
     cv2.destroyWindow("Corners")
-    
+
     print( '')
     print( 'Finished processing images.')
 
@@ -195,12 +195,12 @@ def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_da
     print(' ')
     print('Distortion Coefficients: ')
     print(str(distCoeff))
-    print(' ') 
+    print(' ')
 
     #Save data
-    print( 'Saving data file...')    
+    print( 'Saving data file...')
     np.savez(a_writePathData, distCoeff=distCoeff, intrinsic_matrix=intrinsic_matrix)
-    
+
     print('Calibration complete')
 
     #Calculate the total reprojection error.  The closer to zero the better.
@@ -219,11 +219,11 @@ def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_da
     mapx, mapy = cv2.initUndistortRectifyMap(intrinsic_matrix, distCoeff, None, newMat, image_size, m1type = cv2.CV_32FC1)
 
     for i in range(1, n_boards + 1):
-    
+
         #Loading images
         print( 'Loading... Calibration_Image' + str(i) + '.png' )
         image = cv2.imread(os.path.join(tempDir,('Calibration_Image' + str(i) + '.png')))#'Calibration_Image' + str(i) + '.png')
-        
+
         # undistort
         dst = cv2.remap(image, mapx, mapy, cv2.INTER_LINEAR)
         img = cv2.resize(dst, (0,0), fx=sc,fy=sc,interpolation=cv2.INTER_NEAREST)
@@ -232,7 +232,7 @@ def ImageProcessing(a_writePathData = os.path.join(writePathData,'calibration_da
         char = cv2.waitKey(10)
 
     cv2.destroyAllWindows()
-    
+
 def DewarpMovie(readpath,writepath,datapath):
     print('----------------------------------------------------------------------------')
     print('Loading video from...')
@@ -241,28 +241,28 @@ def DewarpMovie(readpath,writepath,datapath):
     print('Saving video to...')
     print(writepath)
     print('----------------------------------------------------------------------------')
-    
+
     #Load the file given to the function
     video = cv2.VideoCapture(readpath)
     #Checks to see if a the video was properly imported
     status = video.isOpened()
-    
+
     if status == True:
         total_frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
-        
+
         pb = ProgressBar(total=total_frames,prefix='8==',suffix='===D',length=50,decimals=0,fill='=',zfill='-')
-            
+
         with np.load(datapath) as data:
             intrinsic_matrix = data['intrinsic_matrix']
             distCoeff = data['distCoeff']
-            
+
         newMat, ROI = cv2.getOptimalNewCameraMatrix(intrinsic_matrix, distCoeff, image_size, alpha = crop, centerPrincipalPoint = 1)
         mapx, mapy = cv2.initUndistortRectifyMap(intrinsic_matrix, distCoeff, None, newMat, image_size, m1type = cv2.CV_32FC1)
-        
+
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         #cv2.VideoWriter_fourcc('M','P','E','G')
         out = cv2.VideoWriter(writepath,fourcc, 24, image_size)
-        
+
         for i in range(1, int(total_frames)):
             success , image = video.read()
             if success == True:
@@ -271,19 +271,19 @@ def DewarpMovie(readpath,writepath,datapath):
                 #temp = cv2.resize(dst[int(mapy[ROI[1],ROI[0]]):int((mapy[ROI[3],ROI[1]])), int(mapx[ROI[0],[1]]):int((mapx[ROI[0],ROI[1]]))], image_size, fx=sc,fy=sc,interpolation=cv2.INTER_NEAREST)
                 out.write(dst)
                 pb.print_progress_bar(i)
-                
+
         out.release()
         video.release()
         cv2.destroyAllWindows()
-        
+
     else:
         print('Error: Could not load video')
         sys.exit()
     print(' ')
-        
-        
-if __name__ == '__main__':    
-    
+
+
+if __name__ == '__main__':
+
     print("Starting camera calibration....")
     print("Step 1: Image Collection")
     print("We will playback the calibration video.  Press the spacebar to save")
@@ -302,7 +302,7 @@ if __name__ == '__main__':
     print(' ')
 
     ImageProcessing(n_boards, board_w, board_h, board_dim)
-    
+
     print(' ')
     print('All selected images have been processed.')
     print('------------------------------------------------------------------------')
@@ -310,5 +310,5 @@ if __name__ == '__main__':
     print('We will use the analysis to dewarp selected video and display frames as we go.')
     print('Press the esc button to close the image windows as they appear.')
     print(' ')
-    
+
     DewarpMovie(readPathVideo, writePathVideo, dataName)

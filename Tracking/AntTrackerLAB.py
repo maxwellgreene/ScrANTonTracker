@@ -8,8 +8,9 @@ import numpy as np
 import cv2
 import glob
 import matplotlib.pyplot as plt
-from shapely.geometry.polygon import LinearRing, Polygon
-from shapely.geometry import LineString, Point
+import matplotlib.animation as animation
+#from shapely.geometry.polygon import LinearRing, Polygon
+#from shapely.geometry import LineString, Point
 import skimage
 import statistics
 import Dewarp
@@ -405,9 +406,6 @@ class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
         self.model.load_weights(WEIGHTS_PATH, by_name=True)
 
     def findAnts(self, image, ants):
-        #try: image = skimage.io.imread(a_file_name)
-        #except e: return None, None
-
         results = self.model.detect([image], verbose=0)
         r = results[0]
 
@@ -466,9 +464,8 @@ class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
         }
         """
 
-        vis = None #
-        #visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
-
+        vis = None#visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
+        #print("vis type: ",type(vis))
         #should return a list of the form: [cx, cy, theta, l, w]
         return vis, antLocs #[cx,cy,thetas,ls,ws] #self.reformat(r['rois'],r['masks'], r['scores'], r['class_ids']), cv_image[:,:,::-1]
 
@@ -477,7 +474,7 @@ class antTracker:
         self.dt = 1
         self.extractortype = "MaskRCNN"
         if self.extractortype == "Threshhold":
-            self.extractor = extractorTH
+            self.extractor = extractorTH()
         else:
             self.extractor = extractorMaskRCNN()
         self.ants = []
@@ -496,27 +493,40 @@ class antTracker:
         self.xCrop = a_xCrop
         self.yCrop = a_yCrop
 
-    def plotTracks(self, overFrames = False):
-        if not overFrames:
-            fig0 = plt.figure(figsize=(12, 10), dpi=100, facecolor='w', edgecolor='k')
-            for i, a in enumerate(self.ants):
-                plt.plot(a.xs, a.ys )#, self.colors[i])
-            plt.show()
+    def plotTracks(self):
+        fig0 = plt.figure(figsize=(12, 10), dpi=100, facecolor='w', edgecolor='k')
+        for i, a in enumerate(self.ants):
+            plt.plot(a.xs, a.ys)
+        plt.show()
+
+        frames = []
+        for i, frame in enumerate(self.frames):
+            for ant in self.ants:
+                pts = [(ant.xs[i],ant.ys[i]) for i in range(i)]
+                pts = np.array(pts,np.int32).reshape((-1, 1, 2))
+                cv2.polylines(frame,[pts],isClosed = False, color = (0,0,0),thickness = 2)
+
+                arrowstart = (int(ant.xs[i]),int(ant.ys[i]))
+                arrowend   = (int(ant.xs[i] + np.cos(ant.thetas[i])*(ant.lengths[i]/2)),\
+                                int(ant.ys[i] + np.sin(ant.thetas[i])*(ant.lengths[i]/2)))
+                cv2.arrowedLine(frame,arrowstart,arrowend,color = (0,0,0),thickness = 2,tipLength = .25)
+
+            frames.append(frame)
+            cv2.imshow('image',frame)
+            cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     def trackAll(self):
         print('tracking object in all frames')
         moreFrames = True
         while moreFrames:
-            #print(self.frameNumber)
             moreFrames = self.processNextFrame()
-            # if self.frameNumber >= 20:     moreFrames = False
+            #if self.frameNumber >= 10:     moreFrames = False
 
     def processNextFrame(self):
         print('processing frame {}'.format(self.frameNumber))
-
         ret, cur_frame = self.cap.read()
-        if not ret:
-            return False #True
+        if not ret: return False
 
         cur_frame = cur_frame[self.yCrop[0]:self.yCrop[1], self.xCrop[0]:self.xCrop[1], :]
 
@@ -536,7 +546,7 @@ class antTracker:
 
         #===================== Mask RCNN =======================
         frame, headings = self.extractor.findAnts(cur_frame, self.ants)
-
+        #self.frames.append(frame)
         """headings is of the form:
         {
             "a":area,
@@ -558,7 +568,6 @@ class antTracker:
             used = set()
             remaining = set(range(len(self.ants)))
             matchInf = []
-
             while len(remaining) > 0:
                 dists = []
                 i = list(remaining)[0]
@@ -570,7 +579,7 @@ class antTracker:
                     dist = self.ants[i].get_distance((heading['x'],heading['y']))
                     dists.append(dist)
 
-                if np.min(dists) > 75:
+                if np.min(dists) > 150:
                     matchInf.append([i, np.min(dists), -1])
                 else:
                     matchInf.append([i, np.min(dists), np.argmin(dists)])
@@ -610,10 +619,8 @@ class antTracker:
                 else:
                     self.ants[match[0]].update(headings[match[2]])
                 self.ants[match[0]].time[-1]=self.frameNumber
-
+        self.frames.append(cur_frame)
         self.frameNumber += 1
-
-        #self.frames.append(image)
 
         return True
 

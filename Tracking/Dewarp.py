@@ -47,9 +47,6 @@ def makeUndestortMeta():
 
 class DewarpVideoCapture:
     def __init__(self, a_filename,a_calibration_file='calibration_data.npz'):
-        print("===========================")
-        print("===== Dewarping Video =====")
-        print("===========================")
         # call the constructor form cv2.videoCapture
         self.cap = cv2.VideoCapture(a_filename)
 

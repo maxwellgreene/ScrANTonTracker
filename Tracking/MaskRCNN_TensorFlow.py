@@ -6,19 +6,13 @@ from skimage import img_as_ubyte
 from skimage import img_as_float
 import colorsys
 import numpy as np
-
 import cv2
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath(os.getcwd())
 
-# Import Mask RCNN
-sys.path.append(ROOT_DIR)  # To find local version of the library
-from mrcnn import utils
-import mrcnn.model as modellib
-from mrcnn import visualize
 # Import ant configs
-from ants import ants
+import Ant
 
 def random_colors(N, bright=True):
     brightness = 1.0 if bright else 0.7
@@ -27,7 +21,7 @@ def random_colors(N, bright=True):
     random.shuffle(colors)
     return colors
 
-class InferenceConfig(ants.AntConfig):
+class InferenceConfig(Ant.AntConfig):
     # Set batch size to 1 since we'll be running inference on
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
     GPU_COUNT = 1

@@ -1,49 +1,43 @@
-#import matplotlib
-#matplotlib.use("TkAgg")
 import warnings
 warnings.filterwarnings("ignore")
 
-import matplotlib.pyplot as plt
-import numpy as np
-import cv2
-import glob
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-#from shapely.geometry.polygon import LinearRing, Polygon
-#from shapely.geometry import LineString, Point
 import skimage
 import statistics
-import Dewarp
 import os
 import sys
 import math
 import re
-import time
-import logging
-import tensorflow as tf
-import Calibration
-import MaskRCNN_TensorFlow
-
+import numpy as np
+import cv2
 from pprint import pprint
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-tf.autograph.set_verbosity(0)
+import matplotlib.pyplot as plt
+import tensorflow as tf
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath(os.getcwd())
 
 # Import Mask RCNN
-sys.path.append(ROOT_DIR)  # To find local version of the library
+from tensorflow.python.framework.versions import VERSION
+if float(VERSION[0]) == 2:
+    sys.path.append(os.path.join(ROOT_DIR,"mrcnn2"))
+elif float(VERSION[0]) == 1:
+    sys.path.append(os.path.join(ROOT_DIR,"mrcnn1"))
+
 from mrcnn import utils
 import mrcnn.model as modellib
 from mrcnn import visualize
-# Import ant configs
-from ants import ants
+from mrcnn.config import Config
+
+# Import our scripts
+import Ant
+import Calibration
+import MaskRCNN_TensorFlow
+import Dewarp
 
 #This function is useful for viewing the differnt stages of the ant extraction process
 def print_im(a_pic):
     #pic2Display = cv2.resize(a_pic, (800, 800))
-    cv2.imshow('image', apic)
+    cv2.imshow('image', a_pic)
     k = cv2.waitKey(0)
 
 #This function makes a image with the region inside the polygons set to white
@@ -382,7 +376,7 @@ class detectorMaskRCNN(modellib.MaskRCNN):
     #     return results
 
 # Create a config to use with the extractorMaskRCNN class
-class extractorConfig(ants.AntConfig):
+class extractorConfig(Ant.AntConfig):
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
     DETECTION_MIN_CONFIDENCE = 0.3
@@ -394,7 +388,7 @@ class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
         else:           model_dir = os.path.join(ROOT_DIR, "logs")
 
         if a_weights_path:  WEIGHTS_PATH = a_weights_path
-        else:               WEIGHTS_PATH = os.path.join(ROOT_DIR,'models/TRAINEDFULLANTS824.h5')
+        else:               WEIGHTS_PATH = os.path.join(ROOT_DIR,'models/TRAINEDFULLANTS2.h5')
 
         self.config = extractorConfig()
         #self.config.display()
@@ -630,7 +624,7 @@ class antTracker:
 
 def main():
     #Import Information
-    PROJECT_DIR = os.path.join(os.getcwd(),'Projects/sampleAnt')
+    PROJECT_DIR = os.path.join(os.getcwd(),'Tracking/Projects/sampleAnt')
     VIDEO_PATH = os.path.join(PROJECT_DIR,'AntTest.MP4')
     CALIB_DATA_PATH = os.path.join(PROJECT_DIR,'calibration_data.npz')
 

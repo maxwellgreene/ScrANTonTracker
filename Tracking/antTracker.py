@@ -31,8 +31,9 @@ from mrcnn.config import Config
 # Import our scripts
 import Ant
 import Calibration
-import MaskRCNN_TensorFlow
+#import MaskRCNN_TensorFlow
 import Dewarp
+import antUtils
 
 #This function is useful for viewing the differnt stages of the ant extraction process
 def print_im(a_pic):
@@ -53,115 +54,10 @@ def mask_for_polygons(polygons, im_size):
     cv2.fillPoly(img_mask, exteriors, 1)
     return img_mask
 
-class Filter:
-    """
-    basic Kalman filter class
-    """
-    def __init__(self, a_initialState, a_initialStateCov,
-                 a_measCov, a_modelCov, a_model, a_state2Meas):
-        """initialization function"""
+class ant(antUtils.Filter):
+    def __init__(self, dt, a_initialState, framenum = 0):
+
         self.xk = a_initialState
-        self.Pk = a_initialStateCov
-        self.Q = a_modelCov
-        self.R = a_measCov
-        self.F = a_model
-        self.H = a_state2Meas
-
-    def update_extra(self):
-        pass
-
-    def update(self, a_meas):
-        """This function updates the state of the ant given a new measurement a_meas
-        Nothing should need changed here
-        """
-
-        # get predicted state and covar
-        xp, Pp = self.predict(self.xk, self.Pk)
-
-        # get predicted measurement and measurement Covariance
-        zp, K = self.predictedMeas(xp, Pp)
-
-        # update the state vector
-        zdiff = a_meas - zp
-
-        # correct thing if need. This is useful for things like angles that should be between 0 and 360 deg.
-        zdiff = self.correctMeasSubtract(zdiff, zp, a_meas)
-
-        # update the state vector
-        self.xk = xp + np.dot(K, zdiff)
-
-        # update the state covar
-        self.Pk = Pp - np.dot(K, np.dot(self.H, Pp))
-
-        # correct thing if need. This is useful for things like angles that should be between 0 and 360 deg.
-        self.xk, self.Pk = self.CorrectUpdate(self.xk, self.Pk)
-        self.update_extra()
-
-        return self.xk, self.Pk
-
-    def predictedMeas(self, a_xp, a_Pp):
-        """This function tranforms the state vector and covariance matrix into measurement space.
-        Nothing should need changed here provided you have your matrices H,
-        and R set correctly"""
-        zp = np.dot(self.H, a_xp)
-        S = np.dot(self.H, np.dot(a_Pp, self.H.T)) + self.R
-        K = np.dot(a_Pp, np.dot(self.H.T, np.linalg.inv(S)))
-
-        zp, S, K = self.predictedMeasCorrection(zp, S, K)
-        return zp, K
-
-    def predict(self, a_state, a_stateCov):
-        """ prediction function this gives the predicted state vector and
-        covariance matrix given the ones from the previous time step.
-        Nothing should need changed here provided you have your matrices F,
-        and Q set correctly
-        """
-        xp = np.dot(self.F, a_state)  # predicted state vector
-        Pp = np.dot(self.F, np.dot(a_stateCov, self.F.T)) + self.Q  # predicted state covariance matrix
-
-        # correct thing if need. This is useful for things like angles that should be between 0 and 360 deg.
-        xp, Pp = self.predictionCorrection(xp, Pp)
-
-        return xp, Pp
-
-    def updateH(self, a_H):
-        """This function allows you to update the H matrix incase it changes with time."""
-        self.H = a_H
-
-    def updateF(self, a_F):
-        """This function allows you to update the F matrix incase it changes with time."""
-        self.F = a_F
-
-    def updateQ(self, a_Q):
-        """This function allows you to update the Q matrix incase it changes with time."""
-        self.Q = a_Q
-
-    def updateR(self, a_R):
-        """This function allows you to update the R matrix incase it changes with time."""
-        self.R = a_R
-
-    def predictionCorrection(self, a_xp, a_Pp):
-        """ add your correction here if one is needed. """
-        return a_xp, a_Pp
-
-    def predictedMeasCorrection(self, a_zp, a_S, a_K):
-        """ add your correction here if one is needed. """
-        return (a_zp, a_S, a_K)
-
-    def correctMeasSubtract(self, a_zdiff, a_zp, a_zk):
-        """ add your correction here if one is needed. """
-
-        return a_zdiff
-
-    def CorrectUpdate(self, a_xk, a_Pk):
-        """ add your correction here if one is needed. """
-        return a_xk, a_Pk
-
-class ant(Filter):
-    def __init__(self, dt, a_initialState):
-
-        #self.xk = a_initialState
-        self.xk = self.toPoint(a_initialState)
 
         self.Pk = np.array([[20000,     0,   0,    0,    0],
                             [    0, 20000,   0,    0,    0],
@@ -187,8 +83,8 @@ class ant(Filter):
                            [   0,    0,  0, 4, 0],
                            [   0,    0,  0, 0, 4]])
 
-        self.H = np.array([[1, 0, 0, 0, 0],
-                           [0, 1, 0, 0, 0],
+        self.H = np.array([[1.1, 0, 0, 0, 0],
+                           [0, 1.1, 0, 0, 0],
                            [0, 0, 1, 0, 0],
                            [0, 0, 0, 1, 0],
                            [0, 0, 0, 0, 1]])
@@ -204,63 +100,38 @@ class ant(Filter):
         self.xs = []
         self.ys = []
         self.time = []
-        self.add_point(self.xk, 0)
+        self.add_point(self.xk, framenum)
 
-    def getPoint(self):
-        return [self.xs[-1],self.ys[-1],self.thetas[-1],self.lengths[-1],self.widths[-1]]
+    def getPoint(self,loc = -1):
+        return [self.xs[loc],self.ys[loc],self.thetas[loc],self.lengths[loc],self.widths[loc]]
 
-    def getHead(self):
-        return {
-            "a": self.areas[-1],
-            "x":self.xs[-1],
-            "y":self.ys[-1],
-            "w":self.widths[-1],
-            "l":self.lengths[-1],
-            "t":self.thetas[-1]
-        }
-
-    def toHead(self, a_temp):
-        if type(a_temp) is dict:
-            return a_temp
-        else:
-            point = a_temp
-            head = {
-                "a":point[3]*point[4],
-                "x":point[0],
-                "y":point[1],
-                "w":point[4],
-                "l":point[3],
-                "t":point[2]
-            }
-            return head
-
-    def toPoint(self, a_temp):
-        if type(a_temp) is dict:
-            head = a_temp
-            point = [head['x'],head['y'],head['t'],head['l'],head['w']]
+    def getPrediction(self):
+        #print("covars\n",self.state_covars)
+        point = self.getPoint()
+        try:
+            cov = self.state_covars[-1]
+        except IndexError as ie:
             return(point)
-        else:
-            return(a_temp)
+        point, _ = self.predict(point,cov)
+        return(point.tolist())
 
     def update_extra(self):
-        self.add_point(self.xk, 0)
-
-    def update(self, a_pointOhead):
-        super().update(self.toPoint(a_pointOhead))
+        pass
+        #self.add_point(self.xk, 0)
+        #self.updateF(self.getPoint)
 
     def get_distance(self, a_point):
         return np.sqrt((self.xs[-1] - a_point[0]) ** 2 + (self.ys[-1] - a_point[1]) ** 2)
 
-    def add_point(self, a_pointOhead, a_time):
-        point = self.toHead(a_pointOhead)
+    def add_point(self, a_point, a_time):
         #self.xs.append(a_point[0])
         #self.ys.append(a_point[1])
-        self.xs.append      (point['x'])
-        self.ys.append      (point['y'])
-        self.lengths.append (point['l'])
-        self.widths.append  (point['w'])
-        self.thetas.append  (point['t'])
-        self.areas.append   (point['a'])
+        self.xs.append      (a_point[0])
+        self.ys.append      (a_point[1])
+        self.thetas.append  (a_point[2])
+        self.lengths.append (a_point[3])
+        self.widths.append  (a_point[4])
+        self.areas.append   (a_point[3]*a_point[4])
 
         self.time.append(a_time)
 
@@ -277,19 +148,17 @@ class ant(Filter):
     def predictedMeasCorrection(self, a_zp, a_S, a_K):
         """ add your corretion here if one is needed. """
         a_zp, __ = self.predictionCorrection(a_zp, None)
-
         return a_zp, a_S, a_K
 
     def correctMeasSubtract(self, a_zdiff, a_zp, a_zk):
-
+        """ add your corretion here if one is needed. """
         if np.abs(a_zdiff[2]) > 90:
             a_zdiff[2] = a_zdiff[2] - np.sign(a_zdiff[2]) * 180
-
         return a_zdiff
 
     def CorrectUpdate(self, a_xk, a_Pk):
         """ add your corretion here if one is needed. """
-        self.predictionCorrection(a_xk, a_Pk)
+        a_xk, a_Pk = self.predictionCorrection(a_xk, a_Pk)
         self.state_vars.append(a_xk)
         self.state_covars.append(a_Pk)
         return a_xk, a_Pk
@@ -307,7 +176,7 @@ class detectorMaskRCNN(modellib.MaskRCNN):
         self.mode = mode
         self.config = config
         self.model_dir = model_dir
-        self.set_log_dir()#self.model_dir)
+        self.set_log_dir()
         self.keras_model = self.build(mode=mode, config=config)
     #
     # def detect(self, images, ants, verbose=0):
@@ -381,32 +250,37 @@ class extractorConfig(Ant.AntConfig):
     IMAGES_PER_GPU = 1
     DETECTION_MIN_CONFIDENCE = 0.3
 
-class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
+class extractorMaskRCNN(antUtils.MaskRCNN_TensorFlow):
     def __init__(self,a_model_dir = None,a_weights_path = None):
         # Directory to save logs and trained model
         if a_model_dir: model_dir = a_model_dir
         else:           model_dir = os.path.join(ROOT_DIR, "logs")
 
         if a_weights_path:  WEIGHTS_PATH = a_weights_path
-        else:               WEIGHTS_PATH = os.path.join(ROOT_DIR,'models/TRAINEDFULLANTS2.h5')
+        else:               WEIGHTS_PATH = os.path.join(ROOT_DIR,'models/TRAINEDFULLANTS824.h5')
 
+        # self.config = InferenceConfig()
         self.config = extractorConfig()
         #self.config.display()
 
         # Create model object in inference mode.
+        # self.model = modellib.MaskRCNN(mode="inference", model_dir=MODEL_DIR, config=self.config)
         self.model = detectorMaskRCNN(mode="inference", model_dir=model_dir, config=self.config)
-
         #model.load_weights(MODEL_PATH, by_name=True)
         self.model.load_weights(WEIGHTS_PATH, by_name=True)
 
+        # COCO Class names
+        # Index of the class in the list is its ID. For example, to get ID of
+        # the teddy bear class, use: class_names.index('teddy bear')
+        self.class_names = ['BG','Full Ant', 'Head','Thorax', 'Abdomen']
+        self.labels = {}
+        for i, name, in enumerate(self.class_names):
+            self.labels[i] = name
+
     def findAnts(self, image, ants):
+
         results = self.model.detect([image], verbose=0)
         r = results[0]
-
-        # convert image to open_cv so it works with what we have already done
-        # cv_image = skimage.img_as_ubyte(image)
-        # cv_image = np.ubyte(image)
-
         """ Input:
         a list of dicts, one dict per image. The dict contains:
 
@@ -415,62 +289,39 @@ class extractorMaskRCNN(MaskRCNN_TensorFlow.MaskRCNN_TensorFlow):
         scores: [N] float probability scores for the class IDs
         masks: [H, W, N] instance binary masks
         """
-
         antLocs = []
         class_ids = ['BG', 'Full Ant', 'Abdomen', 'Thorax', 'Head']
 
         for i in range((r['masks'].shape[2])):
-            #For now, check if the class_id is full ant
-            if class_ids[r['class_ids'][i]] == 'Full Ant':
-                mask = r['masks'][:,:,i]
-                contours, _ = cv2.findContours(mask.astype('uint8'), mode = cv2.RETR_LIST, method = cv2.CHAIN_APPROX_SIMPLE)
-                cnt = contours[0]
-                if cnt.shape[0] > 5:
-                    ellipse = cv2.fitEllipse(cnt)
-                    antLocs.append({
-                        "a":cv2.contourArea(cnt),
-                        "x":ellipse[0][0],
-                        "y":ellipse[0][1],
-                        "w":ellipse[1][0],
-                        "l":ellipse[1][1],
-                        "t":ellipse[2]
-                    })
-
-                # areas.append(cv2.contourArea(cnt))
-                # cx.append(ellipse[0][0])
-                # cy.append(ellipse[0][1])
-                # ws.append(ellipse[1][0])
-                # ls.append(ellipse[1][1])
-                # thetas.append(ellipse[2])
+            mask = r['masks'][:,:,i]
+            contours, _ = cv2.findContours(mask.astype('uint8'), mode = cv2.RETR_LIST, method = cv2.CHAIN_APPROX_SIMPLE)
+            cnt = contours[0]
+            if cnt.shape[0] > 5:
+                ellipse = cv2.fitEllipse(cnt)
+                antLocs.append({
+                    "type": str(class_ids[r['class_ids'][i]]),
+                    "head": [ellipse[0][0],ellipse[0][1],ellipse[2],ellipse[1][1],ellipse[1][0]]
+                })
         ##########################
-
         """
         Output:
-
         Headings, a list of dicts, each of the form:
-        {
-            "a":area,
-            "x":center x coord,
-            "y":center y coord,
-            "w":width,
-            "l":length,
-            "t":theta
-        }
+            {
+            "type": class id (str),
+            "head": [cx,cy,thetas,ls,ws]
+            }
         """
+        #if np.random.choice(a=[True,False],size=(1,1),p=[.01,.99]):
+        #visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
+        vis = None
 
-        vis = None#visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],class_ids, r['scores'], title="Predictions")
-        #print("vis type: ",type(vis))
         #should return a list of the form: [cx, cy, theta, l, w]
-        return vis, antLocs #[cx,cy,thetas,ls,ws] #self.reformat(r['rois'],r['masks'], r['scores'], r['class_ids']), cv_image[:,:,::-1]
+        return vis, antLocs
 
 class antTracker:
     def __init__(self):
         self.dt = 1
-        self.extractortype = "MaskRCNN"
-        if self.extractortype == "Threshhold":
-            self.extractor = extractorTH()
-        else:
-            self.extractor = extractorMaskRCNN()
+        self.extractor = extractorMaskRCNN()
         self.ants = []
         self.frames = []
 
@@ -480,12 +331,62 @@ class antTracker:
         self.vidName = a_vidName
         # Opens the video import and sets parameters
         self.cap = Dewarp.DewarpVideoCapture(a_vidName, a_calib_file)
-        width, height = (self.xCrop[1]-self.xCrop[0],self.yCrop[1]-self.yCrop[0])
+        self.width, self.height = (self.xCrop[1]-self.xCrop[0],self.yCrop[1]-self.yCrop[0])
         self.frameNumber = 0
 
     def setCrop(self, a_xCrop, a_yCrop):
         self.xCrop = a_xCrop
         self.yCrop = a_yCrop
+
+    def plotAnts(self,image,headings):
+        def draw_ellipse(img, center, axes, angle, startAngle, endAngle, color, thickness=1, lineType=cv2.LINE_AA, shift=10):
+            center = (int(round(center[0] * 2**shift)),int(round(center[1] * 2**shift)))
+            axes = (int(round(axes[0] * 2**shift)),int(round(axes[1] * 2**shift)))
+            cv2.ellipse(img, center, axes, angle,startAngle, endAngle, color, thickness, lineType, shift)
+
+        antHeadings = [a.getPoint() for a in self.ants]
+        antPredicts = [a.getPrediction() for a in self.ants]
+
+        for heading in antPredicts:
+            #print("antPredict Heading")
+            #pprint(heading)
+            center = (int(heading[0]),int(heading[1]))
+            axes = (int(heading[4])/2,int(heading[3])/2)
+            angle = int(heading[2])
+            draw_ellipse(image,center,axes,angle,0,360,(0,0,255))
+        for heading in antHeadings:
+            #pprint(heading)
+            center = (int(heading[0]),int(heading[1]))
+            axes = (int(heading[4])/2,int(heading[3])/2)
+            angle = int(heading[2])
+            draw_ellipse(image,center,axes,angle,0,360,(255,0,0))
+        for heading in headings:
+            #pprint(heading)
+            center = (int(heading[0]),int(heading[1]))
+            axes = (int(heading[4])/2,int(heading[3])/2)
+            angle = int(heading[2])
+            draw_ellipse(image,center,axes,angle,0,360,(0,255,0))
+        cv2.imshow('image',image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    def plotHeadings(self,image,headings):
+        def draw_ellipse(img, center, axes, angle, startAngle, endAngle, color, thickness=1, lineType=cv2.LINE_AA, shift=10):
+            center = (int(round(center[0] * 2**shift)),int(round(center[1] * 2**shift)))
+            axes = (int(round(axes[0] * 2**shift)),int(round(axes[1] * 2**shift)))
+            cv2.ellipse(img, center, axes, angle,startAngle, endAngle, color, thickness, lineType, shift)
+
+        for heading in headings:
+            #pprint(heading)
+            center = (int(heading[0]),int(heading[1]))
+            axes = (int(heading[4])/2,int(heading[3])/2)
+            angle = int(heading[2])
+            draw_ellipse(image,center,axes,angle,0,360,(0,0,0))
+            #cv2.ellipse(image, center, axes, angle, 0, 360)
+            # cv2.ellipse(image,(int(heading[0]),int(heading[1])),(int(heading[3]),int(heading[4])),heading[2],0,360)
+        cv2.imshow('image',image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     def plotTracks(self):
         fig0 = plt.figure(figsize=(12, 10), dpi=100, facecolor='w', edgecolor='k')
@@ -496,26 +397,43 @@ class antTracker:
         frames = []
         for i, frame in enumerate(self.frames):
             for ant in self.ants:
-                pts = [(ant.xs[i],ant.ys[i]) for i in range(i)]
-                pts = np.array(pts,np.int32).reshape((-1, 1, 2))
-                cv2.polylines(frame,[pts],isClosed = False, color = (0,0,0),thickness = 2)
+                offset = ant.time[0]
+                j=i-offset
+                if j >= 0:
+                    print(i,offset,j)
 
-                arrowstart = (int(ant.xs[i]),int(ant.ys[i]))
-                arrowend   = (int(ant.xs[i] + np.cos(ant.thetas[i])*(ant.lengths[i]/2)),\
-                                int(ant.ys[i] + np.sin(ant.thetas[i])*(ant.lengths[i]/2)))
-                cv2.arrowedLine(frame,arrowstart,arrowend,color = (0,0,0),thickness = 2,tipLength = .25)
+                    pts = [(ant.xs[k],ant.ys[k]) for k in range(j)]
+                    pts = np.array(pts,np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(frame,[pts],isClosed = False, color = (0,0,0),thickness = 2)
+
+                    arrowstart = (int(ant.xs[j]),int(ant.ys[j]))
+                    arrowend   = (int(ant.xs[j] + np.cos(ant.thetas[j])*(ant.lengths[j]/2)),\
+                                    int(ant.ys[j] + np.sin(ant.thetas[j])*(ant.lengths[j]/2)))
+                    cv2.arrowedLine(frame,arrowstart,arrowend,color = (0,0,0),thickness = 2,tipLength = .25)
 
             frames.append(frame)
-            cv2.imshow('image',frame)
-            cv2.waitKey(0)
+            #cv2.imshow('image',frame)
+            #cv2.waitKey(0)
+        #Do something with frames list
         cv2.destroyAllWindows()
+        """
+        h,w,c = frame.shape
+        print(h,w)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter('project.mp4',fourcc, 30, (int(self.width),int(self.height)))
+
+        for i in range(len(frames)):
+            out.write(frames[i])
+        out.release()
+        """
+
 
     def trackAll(self):
         print('tracking object in all frames')
         moreFrames = True
         while moreFrames:
             moreFrames = self.processNextFrame()
-            #if self.frameNumber >= 10:     moreFrames = False
+            if self.frameNumber >= 5:     moreFrames = False
 
     def processNextFrame(self):
         print('processing frame {}'.format(self.frameNumber))
@@ -539,18 +457,13 @@ class antTracker:
         #=======================================================
 
         #===================== Mask RCNN =======================
-        frame, headings = self.extractor.findAnts(cur_frame, self.ants)
-        #self.frames.append(frame)
-        """headings is of the form:
-        {
-            "a":area,
-            "x":center x coord,
-            "y":center y coord,
-            "w":width,
-            "l":length,
-            "t":theta
-        }
-        """
+        frame, temp_headings = self.extractor.findAnts(cur_frame, self.ants)
+
+        headings = []
+        for heading in temp_headings:
+            if heading['type'] == "Full Ant":
+                headings.append(heading['head'])
+        #self.plotHeadings(cur_frame,headings)
         #=======================================================
 
         if self.frameNumber == 0:
@@ -559,60 +472,49 @@ class antTracker:
                 antNew = ant(self.dt, heading)
                 self.ants.append(antNew)
         else:
-            used = set()
-            remaining = set(range(len(self.ants)))
-            matchInf = []
-            while len(remaining) > 0:
-                dists = []
-                i = list(remaining)[0]
-                for j, heading in enumerate(headings):
-                    #print("Comparing heading : ",j," to ant : ",i)
-                    #pprint(heading)
-                    #pprint([self.ants[i].xs[-1],self.ants[i].ys[-1],self.ants[i].thetas[-1]])
+            #Create an array of all ants, their headings and their distances
+            distances = np.array([[j,ant.get_distance((heading[0],heading[1])),i] \
+                for j, ant in enumerate(self.ants) for i, heading in enumerate(headings)\
+                if ant.get_distance((heading[0],heading[1])) < 100],np.uint32)
 
-                    dist = self.ants[i].get_distance((heading['x'],heading['y']))
-                    dists.append(dist)
+            #Remove ant duplciates
+            distances = distances[distances[:,1].argsort()]
+            distances = distances[np.unique(distances[:,0],return_index=True)[1]]
+            #Remove heading duplciates
+            distances = distances[distances[:,1].argsort()]
+            distances = distances[np.unique(distances[:,2],return_index=True)[1]]
 
-                if np.min(dists) > 150:
-                    matchInf.append([i, np.min(dists), -1])
-                else:
-                    matchInf.append([i, np.min(dists), np.argmin(dists)])
+            #print("distances: \n",distances)
+            #Apply all matches
+            for match in distances:
+                self.ants[match[0]].add_point(headings[match[2]],self.frameNumber)
+                self.ants[match[0]].update(headings[match[2]])
+                #self.ants[match[0]].time[-1]=self.frameNumber
 
-                remaining.remove(i)
+            #Find which ants have not been matched
+            remaining_ants = set(range(len(self.ants))) - set(distances[:,0])
+            #print("remaining_ants: \n",remaining_ants)
+            #Predict new headings and update
+            for a in remaining_ants:
+                self.ants[a].update(self.ants[a].getPrediction())
+                self.ants[a].add_point(self.ants[a].getPrediction(),self.frameNumber)
 
-                """
-                sortingStuff = True
-                while sortingStuff:
-                    matchedInd = np.argmin(dists) #contour ind
-                    #check if it has already be assigned
-                    if matchedInd in used:
-                        #is the previous assignment better?
-                        #if np.min(dists) >= matchInf[matchedInd][1]:
-                        if np.min(dists) >= matchInf[np.where(matchInf)][2]
-                            dists[matchedInd] = 9999999  # make it large so we dont find it again
-                        else: #if not lets change it
-                            #add back the old index
-                            remaining.add(matchInf[matchedInd][0])
-                            #over write the match info
-                            matchInf[matchedInd] = [i, np.min(dists)]
-                            remaining.remove(i)
-                            sortingStuff = False
-                    else:
-                        used.add(matchedInd)
-                        #matchInf[matchedInd] = [i,np.min(dists)]
-                        matchInf.append([i, np.min(dists), matchedInd])
-                        remaining.remove(i)
-                        sortingStuff = False
-                """
 
-            for match in matchInf:#.items():
-                #meas_vect, __ = self.ants[match[0]].predictionCorrection(np.array(meas_vects[match[2]]), None)
-                #self.ants[match[0]].update(meas_vect)
-                if match[2] < 0:
-                    self.ants[match[0]].update(self.ants[match[0]].getPoint())
-                else:
-                    self.ants[match[0]].update(headings[match[2]])
-                self.ants[match[0]].time[-1]=self.frameNumber
+            #Find which headings have not been matched
+            remaining_headings = set(range(len(headings))) - set(distances[:,2])
+            #print("remaining_headings: \n",remaining_headings)
+            #Create new ants
+            for h in remaining_headings:
+                antNew = ant(self.dt, headings[h],self.frameNumber)
+                self.ants.append(antNew)
+
+        #antHeadings = [a.getPoint() for a in self.ants]
+        #self.plotAnts(cur_frame,headings)
+
+        # print("Current Point:")
+        # pprint(self.ants[0].getPoint())
+        # print("Predicted Point:")
+        # pprint(self.ants[0].getPrediction())
         self.frames.append(cur_frame)
         self.frameNumber += 1
 
